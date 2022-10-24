@@ -103,6 +103,9 @@ libusb_device_handle* handle = NULL;
 // 0x01,        // bNumConfigurations 1
 //
 // 18 bytes
+//
+// make && clear
+// clear && ./main
 
 // /Users/bischowg/dev/bluetooth/bt_stack_experiments/isr-btstack/btstack/platform/libusb/hci_transport_h2_libusb.c
 // contains the configuration for libusb
@@ -337,34 +340,38 @@ static void find_dev(libusb_device **devs)
 
           // https://stackoverflow.com/questions/4813764/libusb-basic-example-wanted
 
-          // Detach a kernel driver from an interface. This is needed to claim an interface
-          // already claimed by a kernel driver. Returns 0 on success, LIBUSB_ERROR_NOT_FOUND
-          // if no kernel driver was active, LIBUSB_ERROR_INVALID_PARAM if the interface does not exist,
-          // LIBUSB_ERROR_NO_DEVICE if the device has been disconnected and a LIBUSB_ERROR code on failure.
-          // This function is non-portable.
+          // // Detach a kernel driver from an interface. This is needed to claim an interface
+          // // already claimed by a kernel driver. Returns 0 on success, LIBUSB_ERROR_NOT_FOUND
+          // // if no kernel driver was active, LIBUSB_ERROR_INVALID_PARAM if the interface does not exist,
+          // // LIBUSB_ERROR_NO_DEVICE if the device has been disconnected and a LIBUSB_ERROR code on failure.
+          // // This function is non-portable.
           // uint32_t detach_result = libusb_detach_kernel_driver(handle, 0);
           // printf ("libusb_detach_kernel_driver(): %s\n", detach_result ? "failed" : "passed");
 
           libusb_reset_device(handle);
+          usleep(1000 * 1000);
 
           int configuration = 1;
           libusb_set_configuration(handle, configuration);
+          usleep(1000 * 1000);
 
 
 
           //libusb_reset_device();
           //usleep(2000 * 1000);
 
-          // Set the active configuration to config for the device contained by devh.
-          // This function returns 0 on success, LIBUSB_ERROR_NOT_FOUND if the requested
-          // configuration does not exist, LIBUSB_ERROR_BUSY if the interfaces are currently
-          // claimed, LIBUSB_ERROR_NO_DEVICE if the device has been disconnected and a
-          // LIBUSB_ERROR code on failure.
-          uint32_t status = libusb_set_configuration(handle, 0);
-          printf ("libusb_set_configuration(): %s\n", status ? "failed" : "passed");
+          // // Set the active configuration to config for the device contained by devh.
+          // // This function returns 0 on success, LIBUSB_ERROR_NOT_FOUND if the requested
+          // // configuration does not exist, LIBUSB_ERROR_BUSY if the interfaces are currently
+          // // claimed, LIBUSB_ERROR_NO_DEVICE if the device has been disconnected and a
+          // // LIBUSB_ERROR code on failure.
+          // uint32_t status = libusb_set_configuration(handle, 0);
+          // printf ("libusb_set_configuration(): %s\n", status ? "failed" : "passed");
+          // usleep(1000 * 1000);
 
           uint32_t claim_result = libusb_claim_interface(handle, 0);
           printf ("ibusb_claim_interface(): %s\n", claim_result ? "failed" : "passed");
+          usleep(1000 * 1000);
 
 
 /*

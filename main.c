@@ -117,6 +117,9 @@ static int acl_out_addr;
 static int sco_in_addr;
 static int sco_out_addr;
 
+static int usb_send_cmd_packet(uint8_t *packet, int size);
+
+// copied from hci_transport_h2_libusb.c from bluekitchen's btstack
 static int scan_for_bt_endpoints(libusb_device *dev)
 {
     int r;
@@ -197,6 +200,8 @@ static int scan_for_bt_endpoints(libusb_device *dev)
     return 0;
 }
 
+static int transfer_completed = 0;
+
 LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 {
     printf("async_callback() in hci_transport_h2_libusb.c\n");
@@ -215,6 +220,45 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           fprintf(stdout, "%02X%s", transfer->buffer[i], ( i + 1 ) % 16 == 0 ? "\r\n" : " " );
         }
         printf("\n");
+
+        transfer_completed++;
+
+        if (transfer_completed == 2) {
+          //
+          // Send local version info
+          //
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          //buffer[idx++] = 0x00;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x10;
+          buffer[idx++] = 0x00;
+
+          usb_send_cmd_packet(buffer, idx);
+        }
+
+        if (transfer_completed == 4) {
+          //
+          // Send local version info
+          //
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x14;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x00;
+
+          usb_send_cmd_packet(buffer, idx);
+        }
     }
     else if (transfer->status == LIBUSB_TRANSFER_STALL)
     {
@@ -241,7 +285,8 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
     }
 }
 
-static int usb_send_cmd_packet(uint8_t *packet, int size){
+static int usb_send_cmd_packet(uint8_t *packet, int size)
+{
 
     printf("usb_send_cmd_packet() in hci_transport_h2_libusb.c - - libusb_fill_control_setup(), libusb_submit_transfer()\n");
 
@@ -348,6 +393,9 @@ static void find_dev(libusb_device **devs)
           // uint32_t detach_result = libusb_detach_kernel_driver(handle, 0);
           // printf ("libusb_detach_kernel_driver(): %s\n", detach_result ? "failed" : "passed");
 
+          // this usb reset might be another reset compared to the HCI reset!
+          // I think it is necessary first to reset the usb device using this call to libusb_reset_device()
+          // and then later to perform a HCI reset
           libusb_reset_device(handle);
           usleep(1000 * 1000);
 
@@ -450,6 +498,9 @@ We can view asynchronous I/O as a 5 step process:
 
           }
 
+          //
+          // Perform a HCI reset
+          //
 
           unsigned char buffer[1024];
           for (int i = 0; i < 1024; ++i) {
@@ -462,14 +513,35 @@ We can view asynchronous I/O as a 5 step process:
           buffer[idx++] = 0x0C;
           buffer[idx++] = 0x00;
 
-
-
           usb_send_cmd_packet(buffer, idx);
+
+          usleep(100 * 1000);
 
           // // wait for aync operation to return an event
           // for (int j = 0; j < 10; j++) {
           //     usleep(1000 * 1000);
           // }
+
+
+
+
+
+          // //
+          // // Send local version info
+          // //
+
+          // //unsigned char buffer[1024];
+          // for (int i = 0; i < 1024; ++i) {
+          //   buffer[i] = 0x00;
+          // }
+
+          // idx = 0;
+          // //buffer[idx++] = 0x00;
+          // buffer[idx++] = 0x01;
+          // buffer[idx++] = 0x10;
+          // buffer[idx++] = 0x00;
+
+          // usb_send_cmd_packet(buffer, idx);
 
 
 

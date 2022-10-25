@@ -42,8 +42,6 @@ static uint8_t hci_cmd_buffer[3 + 256 + LIBUSB_CONTROL_SETUP_SIZE];
 
 static struct libusb_transfer *command_out_transfer;
 static struct libusb_transfer *acl_out_transfer;
-static struct libusb_transfer *event_in_transfer[EVENT_IN_BUFFER_COUNT];
-//static struct libusb_transfer *acl_in_transfer[ACL_IN_BUFFER_COUNT];
 
 static int usb_acl_out_active = 0;
 static int usb_command_active = 0;
@@ -106,9 +104,24 @@ libusb_device_handle* handle = NULL;
 //
 // make && clear
 // clear && ./main
+//
+// Next steps get wireshark to load on a small log file so it does not crash and
+// send the same commands. Add architecture.
 
 // /Users/bischowg/dev/bluetooth/bt_stack_experiments/isr-btstack/btstack/platform/libusb/hci_transport_h2_libusb.c
 // contains the configuration for libusb
+//
+// HCI commands, HCI events and HCI error codes
+// http://affon.narod.ru/BT/bluetooth_app_c10.pdf - 4.4.2 HCI Event Packet
+// https://www.lisha.ufsc.br/teaching/shi/ine5346-2003-1/work/bluetooth/hci_commands.html
+// https://www.st.com/resource/en/user_manual/um1865-the-bluenrgms-bluetooth-le-stack-application-command-interface-aci-stmicroelectronics.pdf
+//
+// HCI events:
+// Event code (8 bits): identifies the event.
+// Parameter length (8-bit): total length of all parameters in bytes.
+// Event parameters: the number of parameters and their length is event specific.
+//
+// The format of all HCI commands and HCI events is contained in Core_V4.0.pdf: https://www.bluetooth.org/docman/handlers/downloaddoc.ashx?doc_id=229737
 
 // endpoint addresses
 static int event_in_addr;
@@ -200,11 +213,154 @@ static int scan_for_bt_endpoints(libusb_device *dev)
     return 0;
 }
 
+#define HCI_EVENT_CODE_COMMAND_COMPLETE 0x0E
+
+#define HCI_Read_Local_Version_Information 0x0001
+#define HCI_Read_Local_Supported_Commands 0x0002
+#define HCI_Read_BD_ADDR 0x0009
+#define HCI_Read_Local_Name 0x0014
+
+void dump_hci_event(struct libusb_transfer *transfer)
+{
+  printf("HCI-Event\n");
+
+  uint8_t idx = 0;
+
+  uint8_t event_code = transfer->buffer[idx++];
+  //printf("event code: 0x%02X\n", event_code);
+
+  uint8_t parameter_total_length;
+
+  // the Number of HCI command packets which are allowed to be sent to the
+  // Controller from the Host. Range for N: 0 – 255
+  uint8_t num_HCI_command_packets;
+
+  // opcode of the command which caused this event
+  uint16_t command_opcode;
+
+  uint8_t code_lower;
+  uint8_t code_upper;
+
+  uint8_t status;
+
+  uint8_t temp;
+
+  switch (event_code)
+  {
+    // Core_V4.0.pdf - 7.7.14 Command Complete Event - page 732 of 1114
+    case HCI_EVENT_CODE_COMMAND_COMPLETE:
+      printf("COMMAND COMPLETE\n");
+
+      // This is the return parameter(s) for the command specified in the
+      // Command_Opcode event parameter. See each command’s definition for
+      // the list of return parameters associated with that command.
+
+      parameter_total_length = transfer->buffer[idx++];
+      printf("parameter_total_length: 0x%02x\n", parameter_total_length);
+
+      num_HCI_command_packets = transfer->buffer[idx++];
+      printf("num_HCI_command_packets: 0x%02x\n", num_HCI_command_packets);
+
+      code_lower = transfer->buffer[idx++];
+      code_upper = transfer->buffer[idx++];
+      command_opcode = (code_upper << 8) + code_lower;
+      printf("command_opcode: 0x%04x\n", command_opcode);
+
+
+
+      switch (code_lower)
+      {
+        case HCI_Read_Local_Version_Information:
+          printf("Response to HCI_Read_Local_Version_Information\n");
+
+          // status
+          status = transfer->buffer[idx++];
+          printf("status: 0x%02x\n", status);
+
+          // HCI Version (1 Byte)
+          printf("HCI Version: 0x%02x\n", transfer->buffer[idx++]);
+
+          // HCI Revision (2 Byte)
+          temp = transfer->buffer[idx++];
+          printf("HCI Revision: 0x%04x\n", (transfer->buffer[idx++] << 8) + temp);
+
+          // LMP Version (1 Byte)
+          printf("LMP Version: 0x%02x\n", transfer->buffer[idx++]);
+
+          // Manufacturer_Name (2 Byte)
+          temp = transfer->buffer[idx++];
+          printf("Manufacturer_Name: 0x%04x\n", (transfer->buffer[idx++] << 8) + temp);
+
+          // LMP Subversion (2 Byte)
+          temp = transfer->buffer[idx++];
+          printf("LMP Subversion: 0x%02x\n", (transfer->buffer[idx++] << 8) + temp);
+
+          break;
+
+        case HCI_Read_Local_Name:
+          printf("Response to HCI_Read_Local_Name\n");
+
+          // status
+          status = transfer->buffer[idx++];
+          printf("status: 0x%02x\n", status);
+
+          printf("DeviceLocalName: \"");
+          printf((transfer->buffer + idx));
+          printf("\"\n");
+          break;
+
+        case HCI_Read_Local_Supported_Commands:
+          printf("Response to HCI_Read_Local_Supported_Commands\n");
+
+          // status
+          status = transfer->buffer[idx++];
+          printf("status: 0x%02x\n", status);
+
+          printf("Local supported commands\n");
+          for (int i = idx; i < transfer->actual_length; ++i) {
+            fprintf(stdout, "%02X%s", transfer->buffer[i], ( i + 1 ) % 16 == 0 ? "\r\n" : " " );
+          }
+          printf("\n");
+          break;
+
+        case HCI_Read_BD_ADDR:
+          printf("Response to HCI_Read_BD_ADDR\n");
+
+          // status
+          status = transfer->buffer[idx++];
+          printf("status: 0x%02x\n", status);
+
+          printf("BD_ADDR\n");
+          for (int i = (transfer->actual_length-1); i >= idx; --i) {
+            if (i != (transfer->actual_length-1))
+            {
+              printf(":");
+            }
+            fprintf(stdout, "%02X%s", transfer->buffer[i], ( i + 1 ) % 16 == 0 ? "\n" : "" );
+          }
+          printf("\n");
+          break;
+
+        default:
+          printf("Response to UNKOWN command\n");
+          break;
+      }
+
+      break;
+
+    default:
+      printf("Unknown event code: 0x%02x\n", event_code);
+      break;
+
+  }
+
+}
+
 static int transfer_completed = 0;
 
 LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 {
-    printf("async_callback() in hci_transport_h2_libusb.c\n");
+    printf("async_callback() main.c\n");
 
     int r;
     printf("begin async_callback endpoint %x, status %x, actual length %u \n",
@@ -221,12 +377,19 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
         }
         printf("\n");
 
+        dump_hci_event(transfer);
+
         transfer_completed++;
 
-        if (transfer_completed == 2) {
+        printf("transfer_completed: %d\n", transfer_completed);
+
+        if (transfer_completed == 2)
+        {
           //
-          // Send local version info
+          // HCI command - Send "Read local version info" command
           //
+
+          printf("HCI command - Send \"Read local version info\" command\n");
 
           unsigned char buffer[1024];
           for (int i = 0; i < 1024; ++i) {
@@ -234,18 +397,25 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           }
 
           int idx = 0;
-          //buffer[idx++] = 0x00;
           buffer[idx++] = 0x01;
           buffer[idx++] = 0x10;
           buffer[idx++] = 0x00;
 
+          // int idx = 0;
+          // buffer[idx++] = 0x09;
+          // buffer[idx++] = 0x10;
+          // buffer[idx++] = 0x00;
+
           usb_send_cmd_packet(buffer, idx);
         }
 
-        if (transfer_completed == 4) {
+        if (transfer_completed == 4)
+        {
           //
-          // Send local version info
+          // HCI command - Send "Read local name" command
           //
+
+          printf("HCI command - Send \"Read local name\" command\n");
 
           unsigned char buffer[1024];
           for (int i = 0; i < 1024; ++i) {
@@ -255,6 +425,58 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           int idx = 0;
           buffer[idx++] = 0x14;
           buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x00;
+
+          usb_send_cmd_packet(buffer, idx);
+        }
+
+        if (transfer_completed == 6)
+        {
+          //
+          // HCI command - Send "Read local supported commands" command
+          //
+
+          printf("HCI command - Send \"Read local supported commands\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x02;
+          buffer[idx++] = 0x10;
+          buffer[idx++] = 0x00;
+
+          // int idx = 0;
+          // buffer[idx++] = 0x09;
+          // buffer[idx++] = 0x10;
+          // buffer[idx++] = 0x00;
+
+          usb_send_cmd_packet(buffer, idx);
+        }
+
+        if (transfer_completed == 8)
+        {
+          //
+          // HCI command - Send "Read BD ADDR" command
+          //
+
+          printf("HCI command - Send \"Read BD ADDR\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // int idx = 0;
+          // buffer[idx++] = 0x02;
+          // buffer[idx++] = 0x10;
+          // buffer[idx++] = 0x00;
+
+          int idx = 0;
+          buffer[idx++] = 0x09;
+          buffer[idx++] = 0x10;
           buffer[idx++] = 0x00;
 
           usb_send_cmd_packet(buffer, idx);
@@ -287,13 +509,12 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 
 static int usb_send_cmd_packet(uint8_t *packet, int size)
 {
+    printf("usb_send_cmd_packet() in main.c - libusb_fill_control_setup(), libusb_submit_transfer()\n");
 
-    printf("usb_send_cmd_packet() in hci_transport_h2_libusb.c - - libusb_fill_control_setup(), libusb_submit_transfer()\n");
-
-    printf(">>> ");
+    printf(">>> [size of message: %d] ", size);
     for (int i = 0; i < size; ++i)
     {
-        fprintf(stdout, "%02X%s", packet[i], ( i + 1 ) % 16 == 0 ? "\r\n" : " " );
+        fprintf(stdout, "%02X%s", packet[i], ( i + 1 ) % 16 == 0 ? "\n" : " " );
     }
     printf("\n");
 
@@ -436,16 +657,22 @@ We can view asynchronous I/O as a 5 step process:
 
           // STEP 1 - allocate transfer handlers
           int c;
-          for (c = 0 ; c < EVENT_IN_BUFFER_COUNT ; c++) {
-              event_in_transfer[c] = libusb_alloc_transfer(0); // 0 isochronous transfers Events
-              if (!event_in_transfer[c]) {
+          for (c = 0; c < EVENT_IN_BUFFER_COUNT; c++)
+          {
+              // 0 isochronous transfers Events
+              event_in_transfer[c] = libusb_alloc_transfer(0);
+              if (!event_in_transfer[c])
+              {
                   libusb_exit(NULL);
                   return;
               }
           }
-          for (c = 0 ; c < ACL_IN_BUFFER_COUNT ; c++) {
-              acl_in_transfer[c]  =  libusb_alloc_transfer(0); // 0 isochronous transfers ACL in
-              if (!acl_in_transfer[c]) {
+          for (c = 0; c < ACL_IN_BUFFER_COUNT; c++)
+          {
+              // 0 isochronous transfers ACL in
+              acl_in_transfer[c]  =  libusb_alloc_transfer(0);
+              if (!acl_in_transfer[c])
+              {
                   libusb_exit(NULL);
                   return;
               }
@@ -495,11 +722,10 @@ We can view asynchronous I/O as a 5 step process:
                   libusb_exit(NULL);
                   return;
               }
-
           }
 
           //
-          // Perform a HCI reset
+          // HCI command - Perform a HCI reset
           //
 
           unsigned char buffer[1024];
@@ -508,7 +734,6 @@ We can view asynchronous I/O as a 5 step process:
           }
 
           int idx = 0;
-          //buffer[idx++] = 0x00;
           buffer[idx++] = 0x03;
           buffer[idx++] = 0x0C;
           buffer[idx++] = 0x00;

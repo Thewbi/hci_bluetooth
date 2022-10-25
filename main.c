@@ -48,6 +48,8 @@ static int usb_command_active = 0;
 
 libusb_device_handle* handle = NULL;
 
+libusb_context* context = NULL;
+
 // libusb_control_transfer() request types
 #define GET_STATUS 0x00
 #define CLEAR_FEATURE 0x01
@@ -358,9 +360,101 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
 static int transfer_completed = 0;
 
+
+// FROM https://github.com/JohnOrlando/uhd_with_burx/blob/master/host/lib/transport/libusb1_zero_copy.cpp
+/*
+ * https://github.com/JohnOrlando/uhd_with_burx/blob/master/host/lib/transport/libusb1_zero_copy.cpp
+ *
+ * Print status errors of a completed transfer
+ * \param lut pointer to an libusb_transfer
+ */
+void print_transfer_status(struct libusb_transfer *lut)
+{
+    //std::cout << "here " << lut->status << std::endl;
+
+    printf("()()()()()()() status\n");
+
+    switch (lut->status)
+    {
+
+      case LIBUSB_TRANSFER_COMPLETED:
+          printf("LIBUSB_TRANSFER_COMPLETED\n");
+          // if (lut->actual_length < lut->length) {
+          //     std::cerr << "USB: transfer completed with short write,"
+          //               << " length = " << lut->length
+          //               << " actual = " << lut->actual_length << std::endl;
+          // }
+
+          // if ((lut->actual_length < 0) || (lut->length < 0)) {
+          //     std::cerr << "USB: transfer completed with invalid response"
+          //               << std::endl;
+          // }
+          break;
+
+      case LIBUSB_TRANSFER_CANCELLED:
+          printf("LIBUSB_TRANSFER_CANCELLED\n");
+          break;
+
+      case LIBUSB_TRANSFER_NO_DEVICE:
+          printf("USB: device was disconnected\n");
+          break;
+
+      case LIBUSB_TRANSFER_OVERFLOW:
+          printf("USB: device sent more data than requested\n");
+          break;
+
+      case LIBUSB_TRANSFER_TIMED_OUT:
+          printf("USB: transfer timed out\n");
+          break;
+
+      case LIBUSB_TRANSFER_STALL:
+          printf("USB: halt condition detected (stalled)\n");
+          break;
+
+      case LIBUSB_TRANSFER_ERROR:
+          printf("USB: transfer failed\n");
+          break;
+
+      default:
+          printf("USB: received unknown transfer status\n");
+          break;
+    }
+}
+
 LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 {
     printf("async_callback() main.c\n");
+    print_transfer_status(transfer);
+
+    // always handling an event as we're called when data is ready
+    struct timeval tv;
+    memset(&tv, 0, sizeof(struct timeval));
+    libusb_handle_events_timeout(NULL, &tv);
+
+    int result = libusb_event_handler_active(context);
+    if (result == 1)
+    {
+      printf("1 if a thread is handling events\n");
+    }
+    else
+    {
+        printf("0 if there are no threads currently handling events Multi-threaded applications and asynchronous I/O\n");
+    }
+
+
+    // check if all done
+    int completed = 1;
+    for (int c = 0; c < EVENT_IN_BUFFER_COUNT; c++)
+    {
+        if (event_in_transfer[c])
+        {
+            printf("event_in_transfer[%u] still active (%p)\n", c, event_in_transfer[c]);
+            completed = 0;
+
+            print_transfer_status(event_in_transfer[c]);
+            //break;
+        }
+    }
 
     int r;
     printf("begin async_callback endpoint %x, status %x, actual length %u \n",
@@ -406,7 +500,11 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           // buffer[idx++] = 0x10;
           // buffer[idx++] = 0x00;
 
+          usleep(3000 * 1000);
           usb_send_cmd_packet(buffer, idx);
+
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
         }
 
         if (transfer_completed == 4)
@@ -427,11 +525,17 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           buffer[idx++] = 0x0c;
           buffer[idx++] = 0x00;
 
+          usleep(3000 * 1000);
           usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
         }
 
         if (transfer_completed == 6)
         {
+
           //
           // HCI command - Send "Read local supported commands" command
           //
@@ -453,7 +557,12 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           // buffer[idx++] = 0x10;
           // buffer[idx++] = 0x00;
 
+          usleep(3000 * 1000);
           usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
         }
 
         if (transfer_completed == 8)
@@ -479,7 +588,12 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           buffer[idx++] = 0x10;
           buffer[idx++] = 0x00;
 
+          usleep(3000 * 1000);
           usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
         }
     }
     else if (transfer->status == LIBUSB_TRANSFER_STALL)
@@ -542,7 +656,7 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
 
     printf("C\n");
 
-    // update stata before submitting transfer
+    // update state before submitting transfer
     usb_command_active = 1;
 
     // submit transfer
@@ -557,12 +671,18 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
         return -1;
     }
 
+    printf("OUT: ");
+    print_transfer_status(command_out_transfer);
+
+    // printf("IN: ");
+    // print_transfer_status(command_in_transfer);
+
     printf("E\n");
 
     return 0;
 }
 
-libusb_context* context = NULL;
+
 
 static void find_dev(libusb_device **devs)
 {
@@ -670,7 +790,7 @@ We can view asynchronous I/O as a 5 step process:
           for (c = 0; c < ACL_IN_BUFFER_COUNT; c++)
           {
               // 0 isochronous transfers ACL in
-              acl_in_transfer[c]  =  libusb_alloc_transfer(0);
+              acl_in_transfer[c] = libusb_alloc_transfer(0);
               if (!acl_in_transfer[c])
               {
                   libusb_exit(NULL);
@@ -695,10 +815,10 @@ We can view asynchronous I/O as a 5 step process:
 
               printf("B\n");
 
+              // STEP 3 - submission
+
               r = libusb_submit_transfer(event_in_transfer[c]);
-
               printf("C\n");
-
               if (r) {
 
                   printf("D\n");
@@ -707,6 +827,8 @@ We can view asynchronous I/O as a 5 step process:
                   libusb_exit(NULL);
                   return;
               }
+
+              print_transfer_status(event_in_transfer[c]);
           }
 
           for (int c = 0; c < ACL_IN_BUFFER_COUNT; c++)
@@ -722,6 +844,8 @@ We can view asynchronous I/O as a 5 step process:
                   libusb_exit(NULL);
                   return;
               }
+
+              print_transfer_status(acl_in_transfer[c]);
           }
 
           //

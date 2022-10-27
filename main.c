@@ -216,15 +216,100 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 }
 
 #define HCI_EVENT_CODE_COMMAND_COMPLETE 0x0E
+#define HCI_EVENT_TRANSFER_COMPLETE 0x21
+#define HCI_Set_Event_Mask 0x0c01
+//#define HCI_ 0x0c02
+#define HCI_Reset 0x0c03
+#define HCI_Set_Event_Filter 0x0c05
+#define HCI_Flush 0x0c08
+#define HCI_Read_Pin_Type 0x0c09
+#define HCI_Write_Pin_Type 0x0c0A
+#define HCI_Create_New_Unit_Key 0x0c0B
+#define HCI_Read_Stored_Link_Key 0x0c0D
+#define HCI_Write_Stored_Link_Key 0x0c11
+#define HCI_Delete_Stored_Link_Key 0x0c12
+#define HCI_Write_Local_Name 0x0c13
+#define HCI_Read_Local_Name 0x0c14
+#define HCI_Read_Connection_Accept_Timeout 0x0c15
+#define HCI_Write_Connection_Accept_Timeout 0x0c16
+#define HCI_Read_Page_Timeout 0x0c17
+#define HCI_Write_Page_Timeout 0x0c18
+#define HCI_Read_Scan_Enable 0x0c19
+#define HCI_Write_Scan_Enable 0x0c1A
+#define HCI_Read_Page_Scan_Activity 0x0c1B
+#define HCI_Write_Page_Scan_Activity 0x0c1C
+#define HCI_Read_Inquiry_Scan_Activity 0x0c1D
+#define HCI_Write_Inquiry_Scan_Activity 0x0c1E
+#define HCI_Read_Authentication_Enable 0x0c1F
+#define HCI_Write_Authentication_Enable 0x0c20
+#define HCI_Read_Class_of_Device 0x0c23
+#define HCI_Write_Class_of_Device 0x0c24
+#define HCI_Read_Voice_Setting 0x0c25
+#define HCI_Write_Voice_Setting 0x0c26
+#define HCI_Read_Automatic_Flush_Timeout 0x0c27
+#define HCI_Write_Automatic_Flush_Timeout 0x0c28
+#define HCI_Read_Num_Broadcast_Retransmissions 0x0c29
+#define HCI_Write_Num_Broadcast_Retransmissions 0x0c2A
+#define HCI_Read_Hold_Mode_Activity 0x0c2B
+#define HCI_Write_Hold_Mode_Activity 0x0c2C
+#define HCI_Read_Transmit_Power_Level 0x0c2D
+#define HCI_Read_Synchronous_Flow_Control_Enable 0x0c2E
+#define HCI_Write_Synchronous_Flow_Control_Enable 0x0c2F
+#define HCI_Set_Controller_To_Host_Flow_Control 0x0c31
+#define HCI_Host_Buffer_Size 0x0c33
+#define HCI_Host_Number_Of_Completed_Packets 0x0c35
+#define HCI_Read_Link_Supervision_Timeout 0x0c36
+#define HCI_Write_Link_Supervision_Timeout 0x0c37
+#define HCI_Read_Number_Of_Supported_IAC 0x0c38
+#define HCI_Read_Current_IAC_LAP 0x0c39
+#define HCI_Write_Current_IAC_LAP 0x0c3A
+#define Set_AFH_Host_Channel_Classification 0x0c3F
+#define HCI_Read_Inquiry_Scan_Type 0x0c42
+#define HCI_Write_Inquiry_Scan_Type 0x0c43
+#define HCI_Read_Inquiry_Mode 0x0c44
+#define HCI_Write_Inquiry_Mode 0x0c45
+#define HCI_Read_Page_Scan_Type 0x0c46
+#define HCI_Write_Page_Scan_Type 0x0c47
+#define Read_AFH_Channel_Assessment_Mode 0x0c48
+#define Write_AFH_Channel_Assessment_Mode 0x0c49
+#define HCI_Read_Extended_Inquiry_Response 0x0c51
+#define HCI_Write_Extended_Inquiry_Response 0x0c52
+#define HCI_Refresh_Encryption_Key 0x0c53
+#define HCI_Read_Simple_Pairing_Mode 0x0c55
+#define HCI_Write_Simple_Pairing_Mode 0x0c56
+#define HCI_Read_Local_OOB_Data 0x0c57
+#define HCI_Read_Inquiry_Response_Transmit_Power_Level 0x0c58
+#define HCI_Write_Inquiry_Transmit_Power_Level 0x0c59
+#define HCI_Send_Keypress_Notification 0x0c60
+#define HCI_Read_Default_Erroneous_Data_Reporting 0x0c5A
+#define HCI_Write_Default_Erroneous_Data_Reporting 0x0c5B
+#define HCI_Enhanced_Flush 0x0c5F
+#define HCI_Read_Logical_Link_Accept_Timeout0x0c61
+#define HCI_Write_Logical_Link_Accept_Timeout 0x0c62
+#define HCI_Set_Event_Mask_Page_2 0x0c63
+#define HCI_Read_Location_Data 0x0c64
+#define HCI_Write_Location_Data 0x0c65
+#define HCI_Read_Flow_Control_Mode 0x0c66
+#define HCI_Write_Flow_Control_Mode 0x0c67
+#define HCI_Read_Enhance_Transmit_Power_Level 0x0c68
+#define HCI_Read_Best_Effort_Flush_Timeout 0x0c69
+#define HCI_Write_Best_Effort_Flush_Timeout 0x0c6A
+#define HCI_Short_Range_Mode 0x0c6B
+#define HCI_Read_LE_Host_Support 0x0c6C
+#define HCI_Write_LE_Host_Support 0x0c6D
 
-#define HCI_Read_Local_Version_Information 0x0001
-#define HCI_Read_Local_Supported_Commands 0x0002
-#define HCI_Read_BD_ADDR 0x0009
-#define HCI_Read_Local_Name 0x0014
+#define HCI_Read_Local_Version_Information 0x1001
+#define HCI_Read_Local_Supported_Commands 0x1002
+#define HCI_Read_Local_Supported_Features 0x1003
+#define HCI_Read_Buffer_Size 0x1005
+#define HCI_Read_BD_ADDR 0x1009
+
+
+#define LE_Read_Buffer_Size 0x2002
 
 void dump_hci_event(struct libusb_transfer *transfer)
 {
-  printf("HCI-Event\n");
+  //printf("HCI-Event\n");
 
   uint8_t idx = 0;
 
@@ -245,33 +330,257 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
   uint8_t status;
 
-  uint8_t temp;
+  uint16_t temp;
+
+  uint8_t acl_connection_data_channels;
 
   switch (event_code)
   {
+    case 0x3E:
+      printf("LE META\n");
+
+      // parameter total length
+      parameter_total_length = transfer->buffer[idx++];
+      printf("parameter_total_length: 0x%02x\n", parameter_total_length);
+
+      uint8_t sub_event_code = transfer->buffer[idx++];
+      uint8_t num_reports = transfer->buffer[idx++];
+      uint8_t event_type = transfer->buffer[idx++];
+      uint8_t address_type = transfer->buffer[idx++];
+
+      // address
+      printf("BD_ADDR\n");
+      for (int i = (idx+5); i >= idx; --i) {
+        if (i != idx+5)
+        {
+          printf(":");
+        }
+        fprintf(stdout, "%02X%s", transfer->buffer[i], ( i + 1 ) % 16 == 0 ? "\n" : "" );
+      }
+      printf("\n");
+
+      break;
+
+    case HCI_EVENT_TRANSFER_COMPLETE:
+      break;
+
+    case 0x03:
+      printf("CONNECTION COMPLETE event received!\n");
+
+      // 7.7.3 Connection Complete Event - Core_V4.0.pdf - page 718 of 1114
+      // 03 0B 10 0B 00 AB 8A 0F A3 5F 70 01 00
+
+      // parameter total length
+      parameter_total_length = transfer->buffer[idx++];
+
+      // result code
+      uint8_t result_code = transfer->buffer[idx++];
+      printf("result_code: %02X\n", result_code);
+
+      switch (result_code) {
+
+        case 0x00:
+          printf("success (0x00)\n");
+          break;
+
+          case 0x10:
+            printf("2.16 CONNECTION ACCEPT TIMEOUT EXCEEDED (0X10) The Connection Accept Timeout Exceeded error code indicates that the Connection Accept Timeout has been exceeded for this connection attempt.\n");
+            break;
+
+          default:
+              printf("Unknown error code: %02X\n", result_code);
+            break;
+      }
+
+      // connection handle
+      uint8_t connection_handle_0 = transfer->buffer[idx++];
+      uint8_t connection_handle_1 = transfer->buffer[idx++];
+      printf("connection_handle: %02X:%02X\n", connection_handle_1, connection_handle_0);
+
+      // address
+      printf("BD_ADDR\n");
+      for (int i = (idx+5); i >= idx; --i) {
+        if (i != idx+5)
+        {
+          printf(":");
+        }
+        fprintf(stdout, "%02X%s", transfer->buffer[i], ( i + 1 ) % 16 == 0 ? "\n" : "" );
+      }
+      printf("\n");
+
+      idx += 6;
+
+      acl_connection_data_channels = transfer->buffer[idx++];
+      printf("Link Type: acl_connection_data_channels: %02X\n", acl_connection_data_channels);
+
+      uint8_t encryption_mode_encryption_disabled = transfer->buffer[idx++];
+      printf("Encryption Mode: Encryption Disabled: %02X\n", encryption_mode_encryption_disabled);
+
+      break;
+
+    case 0x04:
+      printf("CONNECTION REQUEST received!\n");
+
+      // 04 0A AB 8A 0F A3 5F 70 0C 02 5A 01
+
+      // parameter total length
+      parameter_total_length = transfer->buffer[idx++];
+
+      // address
+      printf("BD_ADDR\n");
+      for (int i = (idx+5); i >= idx; --i) {
+        if (i != idx+5)
+        {
+          printf(":");
+        }
+        fprintf(stdout, "%02X%s", transfer->buffer[i], ( i + 1 ) % 16 == 0 ? "\n" : "" );
+      }
+      printf("\n");
+
+      idx += 6;
+
+      uint8_t class_of_device_0 = transfer->buffer[idx++];
+      uint8_t class_of_device_1 = transfer->buffer[idx++];
+      uint8_t class_of_device_2 = transfer->buffer[idx++];
+      printf("class_of_device: %02X:%02X:%02X\n", class_of_device_2, class_of_device_1, class_of_device_0);
+
+      acl_connection_data_channels = transfer->buffer[idx++];
+      printf("Link Type: acl_connection_data_channels: %02X\n", acl_connection_data_channels);
+
+      // TODO: send Sent Accept Connection Request
+      // 113	67.214792	host	controller	HCI_CMD	11	Sent Accept Connection Request
+
+      // 00 09 04 07 ab 8a 0f a3 5f 70 01
+
+      unsigned char buffer[1024];
+      for (int i = 0; i < 1024; ++i) {
+        buffer[i] = 0x00;
+      }
+
+      int idx = 0;
+      buffer[idx++] = 0x09;
+      buffer[idx++] = 0x04;
+      buffer[idx++] = 0x07;
+      buffer[idx++] = 0xab;
+      buffer[idx++] = 0x8a;
+      buffer[idx++] = 0x0f;
+      buffer[idx++] = 0xa3;
+      buffer[idx++] = 0x5f;
+      buffer[idx++] = 0x70;
+      buffer[idx++] = 0x01;
+
+      usleep(100 * 1000);
+      usb_send_cmd_packet(buffer, idx);
+
+      transfer->user_data = NULL;
+      libusb_submit_transfer(transfer);
+
+      // TODO Decode this:
+      // 128	67.246620	70:5f:a3:0f:8a:ab ()	Cc&CTech_7d:0e:96 (SPP Counter 5C:F3:70:7D:0E:96)	L2CAP	15	Rcvd Information Request (Extended Features Mask)
+      // 0B 20 0A 00 06 00 01 00 0A 02 02 00 02 00
+
+      ???
+
+      // It is answered with:
+      // 129	67.246677	Cc&CTech_7d:0e:96 (SPP Counter 5C:F3:70:7D:0E:96)	70:5f:a3:0f:8a:ab ()	L2CAP	21	Sent Information Response (Extended Features Mask, Success)
+      // 02 0b 00 10 00 0c 00 01 00 0b 02 08 00 02 00 00 00 80 02 00 00
+
+      break;
+
     // Core_V4.0.pdf - 7.7.14 Command Complete Event - page 732 of 1114
     case HCI_EVENT_CODE_COMMAND_COMPLETE:
-      printf("COMMAND COMPLETE\n");
+      //printf("COMMAND COMPLETE\n");
 
       // This is the return parameter(s) for the command specified in the
       // Command_Opcode event parameter. See each command’s definition for
       // the list of return parameters associated with that command.
 
+      // parameter total length
       parameter_total_length = transfer->buffer[idx++];
-      printf("parameter_total_length: 0x%02x\n", parameter_total_length);
+      //printf("parameter_total_length: 0x%02x\n", parameter_total_length);
 
+      // number of allowed command packets
       num_HCI_command_packets = transfer->buffer[idx++];
-      printf("num_HCI_command_packets: 0x%02x\n", num_HCI_command_packets);
+      //printf("num_HCI_command_packets: 0x%02x\n", num_HCI_command_packets);
 
+      // command opcode
       code_lower = transfer->buffer[idx++];
       code_upper = transfer->buffer[idx++];
       command_opcode = (code_upper << 8) + code_lower;
-      printf("command_opcode: 0x%04x\n", command_opcode);
+      //printf("command_opcode: 0x%04x\n", command_opcode);
 
-
-
-      switch (code_lower)
+      switch (command_opcode)
       {
+
+        case HCI_Write_Page_Timeout:
+          printf("Response to HCI_Write_Page_Timeout\n");
+          break;
+
+        case HCI_Write_Class_of_Device:
+          printf("Response to HCI_Write_Class_of_Device\n");
+          break;
+
+        case HCI_Write_Local_Name:
+          printf("Response to HCI_Write_Local_Name\n");
+          break;
+
+        case HCI_Write_Extended_Inquiry_Response:
+          printf("Response to HCI_Write_Extended_Inquiry_Response\n");
+          break;
+
+        case HCI_Write_Inquiry_Mode:
+          printf("Response to HCI_Write_Inquiry_Mode\n");
+          break;
+
+        case HCI_Write_Scan_Enable:
+          printf("Response to HCI_Write_Scan_Enable\n");
+          break;
+
+        case HCI_Write_Simple_Pairing_Mode:
+          printf("Response to HCI_Write_Simple_Pairing_Mode\n");
+          break;
+
+        case HCI_Set_Event_Mask:
+          printf("Response to HCI_Set_Event_Mask\n");
+          break;
+
+        case HCI_Reset:
+          printf("Response to HCI_Reset\n");
+          break;
+
+        case HCI_Read_Scan_Enable:
+          printf("Response to HCI_Read_Scan_Enable\n");
+
+          // status
+          status = transfer->buffer[idx++];
+          printf("status: 0x%02x\n", status);
+
+          temp = transfer->buffer[idx++];
+
+          switch (temp)
+          {
+            case 0x00:
+              printf("(0x00) No Scans enabled.\n");
+              break;
+
+            case 0x01:
+              printf("(0x01) Inquiry Scan enabled + Page Scan disabled.\n");
+              break;
+
+            case 0x02:
+              printf("(0x02) Inquiry Scan disabled. + Page Scan enabled.\n");
+              break;
+
+            case 0x03:
+              printf("(0x03) Inquiry Scan enabled. + Page Scan enabled.\n");
+              break;
+
+            default:
+              printf("(0x04 - 0xFF) Reserved.\n");
+              break;
+          }
+          break;
+
         case HCI_Read_Local_Version_Information:
           printf("Response to HCI_Read_Local_Version_Information\n");
 
@@ -325,6 +634,160 @@ void dump_hci_event(struct libusb_transfer *transfer)
           printf("\n");
           break;
 
+        case HCI_Read_Local_Supported_Features:
+          printf("Response to HCI_Read_Local_Supported_Commands\n");
+
+          // 0E 0C 01 03 10 00 BF FE CF FE DB FF 7B 87
+
+          // status
+          status = transfer->buffer[idx++];
+          printf("status: 0x%02x\n", status);
+
+          // example response:
+          //
+          // LMP Features
+          //   0xBF - 1011 1111
+          //   .... ...1 = 3-slot packets: True
+          //   .... ..1. = 5-slot packets: True
+          //   .... .1.. = Encryption: True
+          //   .... 1... = Slot Offset: True
+          //   ...1 .... = Timing Accuracy: True
+          //   ..1. .... = Role Switch: True
+          //   .0.. .... = Hold Mode: False
+          //   1... .... = Sniff Mode: True
+          temp = transfer->buffer[idx++];
+
+          uint8_t threeSlotPackets = temp & 0x01; temp >>= 1;
+          uint8_t fiveSlotPackets = temp & 0x01; temp >>= 1;
+          uint8_t encryption = temp & 0x01; temp >>= 1;
+          uint8_t slotOffset = temp & 0x01; temp >>= 1;
+          uint8_t timingAccuracy = temp & 0x01; temp >>= 1;
+          uint8_t roleSwitch = temp & 0x01; temp >>= 1;
+          uint8_t holdMode = temp & 0x01; temp >>= 1;
+          uint8_t sniffMode = temp & 0x01; temp >>= 1;
+
+          printf("3-slot packets: %s\n", threeSlotPackets ? "True" : "False");
+          printf("5-slot packets: %s\n", fiveSlotPackets ? "True" : "False");
+          printf("Encryption: %s\n", encryption ? "True" : "False");
+          printf("Slot Offset: %s\n", slotOffset ? "True" : "False");
+          printf("Timing Accuracy: %s\n", timingAccuracy ? "True" : "False");
+          printf("Role Switch: %s\n", roleSwitch ? "True" : "False");
+          printf("Hold Mode: %s\n", holdMode ? "True" : "False");
+          printf("Sniff Mode: %s\n", sniffMode ? "True" : "False");
+
+          //   0xfe
+          //   .... ...0 = Park Mode: False
+          //   .... ..1. = Power Control Requests: True
+          //   .... .1.. = Channel Quality Driven Data Rate: True
+          //   .... 1... = SCO Link: True
+          //   ...1 .... = HV2 packets: True
+          //   ..1. .... = HV3 packets: True
+          //   .1.. .... = u-law Log Synchronous Data: True
+          //   1... .... = A-law Log Synchronous Data: True
+          temp = transfer->buffer[idx++];
+
+          uint8_t parkMode = temp & 0x01; temp >>= 1;
+          uint8_t powerControlRequests = temp & 0x01; temp >>= 1;
+          uint8_t channelQualityDrivenDataRate = temp & 0x01; temp >>= 1;
+          uint8_t scoLink = temp & 0x01; temp >>= 1;
+          uint8_t hv2Packets = temp & 0x01; temp >>= 1;
+          uint8_t hv3Packets = temp & 0x01; temp >>= 1;
+          uint8_t uLawLogSynchronousData = temp & 0x01; temp >>= 1;
+          uint8_t aLawLogSynchronousData = temp & 0x01; temp >>= 1;
+
+          printf("Park Mode: %s\n", parkMode ? "True" : "False");
+          printf("Power Control Requests: %s\n", powerControlRequests ? "True" : "False");
+          printf("Channel Quality Driven Data Rate: %s\n", channelQualityDrivenDataRate ? "True" : "False");
+          printf("SCO Link: %s\n", scoLink ? "True" : "False");
+          printf("HV2 packets: %s\n", hv2Packets ? "True" : "False");
+          printf("HV3 packets: %s\n", hv3Packets ? "True" : "False");
+          printf("u-law Log Synchronous Data: %s\n", uLawLogSynchronousData ? "True" : "False");
+          printf("A-law Log Synchronous Data: %s\n", aLawLogSynchronousData ? "True" : "False");
+
+          //   .... ...1 = CVSD Synchronous Data: True
+          //   .... ..1. = Paging Parameter Negotiation: True
+          //   .... .1.. = Power Control: True
+          //   .... 1... = Transparent Synchronous Data: True
+          //   .100 .... = Flow Control Lag: 4 (1024 bytes)
+          //   1... .... = Broadband Encryption: True
+          //
+          //   .... ...0 = Reserved: False
+          //   .... ..1. = EDR ACL 2 Mbps Mode: True
+          //   .... .1.. = EDR ACL 3 Mbps Mode: True
+          //   .... 1... = Enhanced Inquiry Scan: True
+          //   ...1 .... = Interlaced Inquiry Scan: True
+          //   ..1. .... = Interlaced Page Scan: True
+          //   .1.. .... = RSSI with Inquiry Results: True
+          //   1... .... = EV3 Packets: True
+          //
+          //   .... ...1 = EV4 Packets: True
+          //   .... ..1. = EV5 Packets: True
+          //   .... .0.. = Reserved: False
+          //   .... 1... = AFH Capable Slave: True
+          //   ...1 .... = AFH Classification Slave: True
+          //   ..0. .... = BR/EDR Not Supported: False
+          //   .1.. .... = LE Supported Controller: True
+          //   1... .... = 3-slot EDR ACL packets: True
+          //
+          //   .... ...1 = 5-slot EDR ACL packets: True
+          //   .... ..1. = Sniff Subrating: True
+          //   .... .1.. = Pause Encryption: True
+          //   .... 1... = AFH Capable Master: True
+          //   ...1 .... = AFH Classification Master: True
+          //   ..1. .... = EDR eSCO 2 Mbps Mode: True
+          //   .1.. .... = EDR eSCO 3 Mbps Mode: True
+          //   1... .... = 3-slot EDR eSCO Packets: True
+          //
+          //   .... ...1 = Extended Inquiry Response: True
+          //   .... ..1. = Simultaneous LE and BR/EDR to Same Device Capable Controller: True
+          //   .... .0.. = Reserved: False
+          //   .... 1... = Secure Simple Pairing: True
+          //   ...1 .... = Encapsulated PDU: True
+          //   ..1. .... = Erroneous Data Reporting: True
+          //   .1.. .... = Non-flushable Packet Boundary Flag: True
+          //   0... .... = Reserved: False
+          //
+          //   .... ...1 = Link Supervision Timeout Changed Event: True
+          //   .... ..1. = Inquiry TX Power Level: True
+          //   .... .1.. = Enhanced Power Control: True
+          //   .000 0... = Reserved: False
+          //   1... .... = Extended Features: True
+
+
+          printf("Local supported featuress\n");
+          break;
+
+        case HCI_Read_Buffer_Size:
+          printf("Response to HCI_Read_Buffer_Size\n");
+
+          // 0E 0B 01 05 10 00 FD 03 40 08 00 01 00
+
+          // status
+          status = transfer->buffer[idx++];
+          printf("status: 0x%02x\n", status);
+
+          // (2 Byte) Host ACL Data Packet Length in bytes
+          temp = transfer->buffer[idx++];
+          temp = (transfer->buffer[idx++] << 8) + temp;
+          printf("Host ACL Data Packet Length in bytes: %d (0x%04x)\n", temp, temp);
+
+          // (1 Byte) Host SCO Data Packet Length in bytes
+          temp = transfer->buffer[idx++];
+          printf("Host SCO Data Packet Length in bytes: %d (0x%02x)\n", temp, temp);
+
+          // (2 Byte) Host Total Num ACL Data Packets
+          temp = transfer->buffer[idx++];
+          temp = (transfer->buffer[idx++] << 8) + temp;
+          printf("Host Total Num ACL Data Packets: %d (0x%04x)\n", temp, temp);
+
+          // (2 Byte) Host Total Num SCO Data Packets
+          temp = transfer->buffer[idx++];
+          temp = (transfer->buffer[idx++] << 8) + temp;
+          printf("Host Total Num SCO Data Packets: %d (0x%04x)\n", temp, temp);
+
+          printf("Buffer Size: \n");
+          break;
+
         case HCI_Read_BD_ADDR:
           printf("Response to HCI_Read_BD_ADDR\n");
 
@@ -343,8 +806,26 @@ void dump_hci_event(struct libusb_transfer *transfer)
           printf("\n");
           break;
 
+        case LE_Read_Buffer_Size:
+          printf("Response to LE_Read_Buffer_Size\n");
+
+          // status
+          status = transfer->buffer[idx++];
+          printf("status: 0x%02x\n", status);
+
+          // le_acl_data_pkt_len
+          temp = transfer->buffer[idx++];
+          temp = (transfer->buffer[idx++] << 8) + temp;
+          printf("LE ACL Data Packet Length: %d (0x%04x)\n", temp, temp);
+
+          // le_total_num_acl_data_pkts
+          temp = transfer->buffer[idx++];
+          printf("Total Number LE ACL Data Packets: %d (0x%02x)\n", temp, temp);
+
+          break;
+
         default:
-          printf("Response to UNKOWN command\n");
+          printf("Response to UNKNOWN command\n");
           break;
       }
 
@@ -370,10 +851,6 @@ static int transfer_completed = 0;
  */
 void print_transfer_status(struct libusb_transfer *lut)
 {
-    //std::cout << "here " << lut->status << std::endl;
-
-    printf("()()()()()()() status\n");
-
     switch (lut->status)
     {
 
@@ -423,25 +900,33 @@ void print_transfer_status(struct libusb_transfer *lut)
 
 LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 {
+  printf("\n\n\n");
+
+  uint32_t wait = 300;
+
+#if 0
     printf("async_callback() main.c\n");
     print_transfer_status(transfer);
+#endif
 
     // always handling an event as we're called when data is ready
     struct timeval tv;
     memset(&tv, 0, sizeof(struct timeval));
     libusb_handle_events_timeout(NULL, &tv);
 
+#if 0
     int result = libusb_event_handler_active(context);
     if (result == 1)
     {
-      printf("1 if a thread is handling events\n");
+        printf("1 if a thread is handling events\n");
     }
     else
     {
         printf("0 if there are no threads currently handling events Multi-threaded applications and asynchronous I/O\n");
     }
+#endif
 
-
+#if 0
     // check if all done
     int completed = 1;
     for (int c = 0; c < EVENT_IN_BUFFER_COUNT; c++)
@@ -455,15 +940,16 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
             //break;
         }
     }
+#endif
 
-    int r;
+#if 0
     printf("begin async_callback endpoint %x, status %x, actual length %u \n",
       transfer->endpoint, transfer->status, transfer->actual_length );
+#endif
 
     if (transfer->status == LIBUSB_TRANSFER_COMPLETED)
     {
-        printf("LIBUSB_TRANSFER_COMPLETED\n");
-        //queue_transfer(transfer);
+        //printf("LIBUSB_TRANSFER_COMPLETED\n");
 
         printf("<<< ");
         for (int i = 0; i < transfer->actual_length; ++i) {
@@ -479,11 +965,13 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 
         if (transfer_completed == 2)
         {
+          printf("\n\n\n");
+
           //
           // HCI command - Send "Read local version info" command
           //
 
-          printf("HCI command - Send \"Read local version info\" command\n");
+          printf(">>> HCI command - Send \"Read local version info\" command\n");
 
           unsigned char buffer[1024];
           for (int i = 0; i < 1024; ++i) {
@@ -495,12 +983,7 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           buffer[idx++] = 0x10;
           buffer[idx++] = 0x00;
 
-          // int idx = 0;
-          // buffer[idx++] = 0x09;
-          // buffer[idx++] = 0x10;
-          // buffer[idx++] = 0x00;
-
-          usleep(3000 * 1000);
+          usleep(wait * 1000);
           usb_send_cmd_packet(buffer, idx);
 
           transfer->user_data = NULL;
@@ -509,11 +992,13 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 
         if (transfer_completed == 4)
         {
+          printf("\n\n\n");
+
           //
           // HCI command - Send "Read local name" command
           //
 
-          printf("HCI command - Send \"Read local name\" command\n");
+          printf(">>> HCI command - Send \"Read local name\" command\n");
 
           unsigned char buffer[1024];
           for (int i = 0; i < 1024; ++i) {
@@ -525,7 +1010,7 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           buffer[idx++] = 0x0c;
           buffer[idx++] = 0x00;
 
-          usleep(3000 * 1000);
+          usleep(wait * 1000);
           usb_send_cmd_packet(buffer, idx);
 
           // without this, the incoming events are not received after all transfers have been used once!
@@ -535,12 +1020,13 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 
         if (transfer_completed == 6)
         {
+          printf("\n\n\n");
 
           //
           // HCI command - Send "Read local supported commands" command
           //
 
-          printf("HCI command - Send \"Read local supported commands\" command\n");
+          printf(">>> HCI command - Send \"Read local supported commands\" command\n");
 
           unsigned char buffer[1024];
           for (int i = 0; i < 1024; ++i) {
@@ -552,12 +1038,7 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           buffer[idx++] = 0x10;
           buffer[idx++] = 0x00;
 
-          // int idx = 0;
-          // buffer[idx++] = 0x09;
-          // buffer[idx++] = 0x10;
-          // buffer[idx++] = 0x00;
-
-          usleep(3000 * 1000);
+          usleep(wait * 1000);
           usb_send_cmd_packet(buffer, idx);
 
           // without this, the incoming events are not received after all transfers have been used once!
@@ -567,11 +1048,251 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 
         if (transfer_completed == 8)
         {
+          printf("\n\n\n");
+
           //
           // HCI command - Send "Read BD ADDR" command
           //
 
-          printf("HCI command - Send \"Read BD ADDR\" command\n");
+          printf(">>> HCI command - Send \"Read BD ADDR\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x09;
+          buffer[idx++] = 0x10;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+        }
+
+        if (transfer_completed == 10)
+        {
+          printf("\n\n\n");
+
+          //
+          // HCI command - Send "Read Buffer Size" command
+          //
+
+          printf(">>> HCI command - Send \"Read Buffer Size\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x05;
+          buffer[idx++] = 0x10;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+        }
+
+        if (transfer_completed == 12)
+        {
+          printf("\n\n\n");
+
+          //
+          // HCI command - Send "Read Local Supported features" command
+          //
+
+          printf(">>> HCI command - Send \"Read Local Supported features\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x03;
+          buffer[idx++] = 0x10;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+        }
+
+        if (transfer_completed == 14)
+        {
+          printf("\n\n\n");
+
+          //
+          // HCI command - Send "Set Event Mask" command
+          //
+
+          printf(">>> HCI command - Send \"Set Event Mask\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+
+          // 00 01 0c 08 ff ff ff ff ff ff ff 3f
+
+          // Command Opcode: Set Event Mask (0x0C01)
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x0C;
+
+          // Parameter Total Length: 08
+          buffer[idx++] = 0x08;
+
+          // Paramter
+          buffer[idx++] = 0xFF;
+          buffer[idx++] = 0xFF;
+          buffer[idx++] = 0xFF;
+          buffer[idx++] = 0xFF;
+
+          buffer[idx++] = 0xFF;
+          buffer[idx++] = 0xFF;
+          buffer[idx++] = 0xFF;
+          buffer[idx++] = 0x3F;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+        }
+
+/**/
+        if (transfer_completed == 16)
+        {
+          printf("\n\n\n");
+
+          //
+          // HCI command - Send "LE Read Buffer Size" command
+          //
+
+          printf(">>> HCI command - Send \"LE Read Buffer Size\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 02 20 00
+
+          int idx = 0;
+          buffer[idx++] = 0x02;
+          buffer[idx++] = 0x20;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+        }
+
+        if (transfer_completed == 18)
+        {
+          printf("\n\n\n");
+
+          //
+          // HCI command - Send "HCI_Read_Scan_Enable" command
+          //
+
+          printf(">>> HCI command - Send \"HCI_Read_Scan_Enable\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x19;
+          buffer[idx++] = 0x0C;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+        }
+
+        if (transfer_completed == 20)
+        {
+          printf("\n\n\n");
+
+          //
+          // HCI command - Send "HCI_LE_Set_Scan_Parameters" command
+          //
+
+          printf(">>> HCI command - Send \"HCI_LE_Set_Scan_Parameters\" command\n");
+
+          unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 0b 20 07 01 e0 01 30 00 00 00
+
+          int idx = 0;
+          buffer[idx++] = 0x0b;
+          buffer[idx++] = 0x20;
+
+          // parameter total length
+          buffer[idx++] = 0x07;
+
+          // scan type (0x01 - active)
+          buffer[idx++] = 0x01;
+
+          // scan interval
+          buffer[idx++] = 0xe0;
+          buffer[idx++] = 0x01;
+
+          // scan window
+          buffer[idx++] = 0x30;
+          buffer[idx++] = 0x00;
+
+          // own address type
+          buffer[idx++] = 0x00;
+
+          // scan filter policy -
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+        }
+
+/*
+        if (transfer_completed == 22)
+        {
+          printf("\n\n\n");
+
+          //
+          // HCI command - Send "HCI_LE_Set_Scan_Enable" command
+          //
+
+          printf(">>> HCI command - Send \"HCI_LE_Set_Scan_Enable\" command\n");
 
           unsigned char buffer[1024];
           for (int i = 0; i < 1024; ++i) {
@@ -579,22 +1300,387 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
           }
 
           // int idx = 0;
+          // buffer[idx++] = 0x20;
+          // buffer[idx++] = 0x0C;
+          // buffer[idx++] = 0x01;
           // buffer[idx++] = 0x02;
-          // buffer[idx++] = 0x10;
           // buffer[idx++] = 0x00;
 
           int idx = 0;
-          buffer[idx++] = 0x09;
-          buffer[idx++] = 0x10;
+          buffer[idx++] = 0x0C;
+          buffer[idx++] = 0x20;
+          buffer[idx++] = 0x02;
+          buffer[idx++] = 0x01;
           buffer[idx++] = 0x00;
 
-          usleep(3000 * 1000);
+          usleep(wait * 1000);
           usb_send_cmd_packet(buffer, idx);
 
           // without this, the incoming events are not received after all transfers have been used once!
           transfer->user_data = NULL;
           libusb_submit_transfer(transfer);
         }
+*/
+
+    if (transfer_completed == 22)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "Write Simple Pairing mode" command
+      //
+
+        printf(">>> HCI command - Send \"Write Simple Pairing mode\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x56;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x01;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+    if (transfer_completed == 24)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "HCI_Write_Page_Timeout" command
+      //
+
+        printf(">>> HCI command - Send \"HCI_Write_Page_Timeout\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x18;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x02;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x60;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+    if (transfer_completed == 26)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "HCI_Write_Class_of_Device" command
+      //
+
+        printf(">>> HCI command - Send \"HCI_Write_Class_of_Device\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 24 0c 03 0c 02 7a
+
+          int idx = 0;
+          buffer[idx++] = 0x24;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x03;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x02;
+          buffer[idx++] = 0x7a;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+    if (transfer_completed == 28)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "HCI_Send_Change_Local_Name" command
+      //
+
+        printf(">>> HCI command - Send \"HCI_Send_Change_Local_Name\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 13 0c f8 53 50 50 20 43 6f 75 6e 74 65 72 20 35 43 3a 46 33 3a 37 30 3a 37 44 3a 30 45 3a 39 36 000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
+          int idx = 0;
+          buffer[idx++] = 0x13;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0xf8;
+
+          // Device Name - 248 byte
+          // buffer[idx++] = 0x53; // S
+          // buffer[idx++] = 0x50; // P
+          // buffer[idx++] = 0x50; // P
+          buffer[idx++] = 0x57; // W
+          buffer[idx++] = 0x46; // F
+          buffer[idx++] = 0x42; // B
+          buffer[idx++] = 0x20; //
+          buffer[idx++] = 0x43; // C
+          buffer[idx++] = 0x6f; // o
+          buffer[idx++] = 0x75; // u
+          buffer[idx++] = 0x6e; // n
+          buffer[idx++] = 0x74; // t
+          buffer[idx++] = 0x65; // e
+          buffer[idx++] = 0x72; // r
+          buffer[idx++] = 0x20;
+          buffer[idx++] = 0x35;
+          buffer[idx++] = 0x43;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x46;
+          buffer[idx++] = 0x33;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x37;
+          buffer[idx++] = 0x30;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x37;
+          buffer[idx++] = 0x44;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x30;
+          buffer[idx++] = 0x45;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x39;
+          buffer[idx++] = 0x36;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, 251); // 3 byte header - 248 byte data
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+
+    if (transfer_completed == 30)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "HCI_Write_Extended_Inquiry_Response" command
+      //
+
+        printf(">>> HCI command - Send \"HCI_Write_Extended_Inquiry_Response\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 52 0c f1 00 1e 09 53 50 50 20 43 6f 75 6e 74 65 72 20 35 43 3a 46 33 3a 37 30 3a 37 44 3a 30 45 3a 39 36 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
+          int idx = 0;
+          buffer[idx++] = 0x52;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0xf1;
+          buffer[idx++] = 0x00;
+
+          // Extended Inquiry Response Data - 240 bytes
+          buffer[idx++] = 0x1e;
+          buffer[idx++] = 0x09;
+
+          // buffer[idx++] = 0x53; // S
+          // buffer[idx++] = 0x50; // P
+          // buffer[idx++] = 0x50; // P
+          buffer[idx++] = 0x57; // W
+          buffer[idx++] = 0x46; // F
+          buffer[idx++] = 0x42; // B
+          buffer[idx++] = 0x20;
+          buffer[idx++] = 0x43;
+          buffer[idx++] = 0x6f;
+          buffer[idx++] = 0x75;
+          buffer[idx++] = 0x6e;
+          buffer[idx++] = 0x74;
+          buffer[idx++] = 0x65;
+          buffer[idx++] = 0x72;
+          buffer[idx++] = 0x20;
+          buffer[idx++] = 0x35;
+          buffer[idx++] = 0x43;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x46;
+          buffer[idx++] = 0x33;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x37;
+          buffer[idx++] = 0x30;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x37;
+          buffer[idx++] = 0x44;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x30;
+          buffer[idx++] = 0x45;
+          buffer[idx++] = 0x3a;
+          buffer[idx++] = 0x39;
+          buffer[idx++] = 0x36;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, 244); // 4 byte header - 240 byte data
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+    if (transfer_completed == 32)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "HCI_Write_Inquiry_Mode" command
+      //
+
+        printf(">>> HCI command - Send \"HCI_Write_Inquiry_Mode\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 45 0c 01 00
+
+          int idx = 0;
+          buffer[idx++] = 0x45;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+    if (transfer_completed == 34)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "HCI_Write_Scan_Enable" command
+      //
+
+        printf(">>> HCI command - Send \"HCI_Write_Scan_Enable\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 1a 0c 01 03
+
+          int idx = 0;
+          buffer[idx++] = 0x1a;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x03;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+    if (transfer_completed == 36)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "Bluetooth HCI Command - Write Default Erroneous Data Reporting" command
+      //
+
+        printf(">>> HCI command - Send \"Bluetooth HCI Command - Write Default Erroneous Data Reporting\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 5b 0c 01 01
+
+          int idx = 0;
+          buffer[idx++] = 0x5b;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x01;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+    if (transfer_completed == 38)
+    {
+      printf("\n\n\n");
+
+      //
+      // HCI command - Send "Bluetooth HCI Command - Vendor Command 0xfc1c - Write SCO PCM INT Parameter" command
+      //
+
+        printf(">>> HCI command - Send \"Bluetooth HCI Command - Vendor Command 0xfc1c - Write SCO PCM INT Parameter\" command\n");
+
+        unsigned char buffer[1024];
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          // 00 1c fc 05 01 00 00 00 00
+
+          int idx = 0;
+          buffer[idx++] = 0x1c;
+          buffer[idx++] = 0xfc;
+          buffer[idx++] = 0x05;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          // without this, the incoming events are not received after all transfers have been used once!
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+    }
+
+
+
+
+
+
+
     }
     else if (transfer->status == LIBUSB_TRANSFER_STALL)
     {
@@ -611,10 +1697,10 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
     else
     {
         printf("async_callback. not data -> resubmit transfer, endpoint %x, status %x, length %u\n",
-          transfer->endpoint, transfer->status, transfer->actual_length);
+        transfer->endpoint, transfer->status, transfer->actual_length);
 
         // No usable data, just resubmit packet
-        r = libusb_submit_transfer(transfer);
+        int r = libusb_submit_transfer(transfer);
         if (r) {
             printf("Error re-submitting transfer %d\n", r);
         }
@@ -623,7 +1709,7 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 
 static int usb_send_cmd_packet(uint8_t *packet, int size)
 {
-    printf("usb_send_cmd_packet() in main.c - libusb_fill_control_setup(), libusb_submit_transfer()\n");
+    //printf("usb_send_cmd_packet() in main.c - libusb_fill_control_setup(), libusb_submit_transfer()\n");
 
     printf(">>> [size of message: %d] ", size);
     for (int i = 0; i < size; ++i)
@@ -634,15 +1720,9 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
 
     int r;
 
-    //if (libusb_state != LIB_USB_TRANSFERS_ALLOCATED) return -1;
-
-    printf("A\n");
-
     // async
     libusb_fill_control_setup(hci_cmd_buffer, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 0, 0, 0, size);
     memcpy(hci_cmd_buffer + LIBUSB_CONTROL_SETUP_SIZE, packet, size);
-
-    printf("B\n");
 
     // for (int i = 0; i < (3 + 256 + LIBUSB_CONTROL_SETUP_SIZE); ++i) {
     //     fprintf(stdout, "%02X%s", hci_cmd_buffer[i], ( i + 1 ) % 16 == 0 ? "\r\n" : " " );
@@ -654,35 +1734,36 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
     libusb_fill_control_transfer(command_out_transfer, handle, hci_cmd_buffer, async_callback, &completed, 0);
     command_out_transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER;
 
-    printf("C\n");
-
     // update state before submitting transfer
     usb_command_active = 1;
 
     // submit transfer
-    r = libusb_submit_transfer(command_out_transfer);
-    if (r < 0)
+    int libusb_submit_transfer_result = libusb_submit_transfer(command_out_transfer);
+    if (libusb_submit_transfer_result < 0)
     {
-        printf("D\n");
-
         usb_command_active = 0;
-        printf("Error submitting cmd transfer %d", r);
+
+        printf("\n");
+        printf("!!!!!!!!!!!!!!! Error submitting cmd transfer %d\n", libusb_submit_transfer_result);
+        printf("!!!!!!!!!!!!!!! Error submitting cmd transfer %d\n", libusb_submit_transfer_result);
+        printf("!!!!!!!!!!!!!!! Error submitting cmd transfer %d\n", libusb_submit_transfer_result);
+        printf("!!!!!!!!!!!!!!! Error submitting cmd transfer %d\n", libusb_submit_transfer_result);
+        printf("!!!!!!!!!!!!!!! Error submitting cmd transfer %d\n", libusb_submit_transfer_result);
+
+        print_transfer_status(command_out_transfer);
+
+        libusb_submit_transfer(command_out_transfer);
 
         return -1;
     }
 
+#if 0
     printf("OUT: ");
     print_transfer_status(command_out_transfer);
-
-    // printf("IN: ");
-    // print_transfer_status(command_in_transfer);
-
-    printf("E\n");
+#endif
 
     return 0;
 }
-
-
 
 static void find_dev(libusb_device **devs)
 {
@@ -744,8 +1825,6 @@ static void find_dev(libusb_device **devs)
           libusb_set_configuration(handle, configuration);
           usleep(1000 * 1000);
 
-
-
           //libusb_reset_device();
           //usleep(2000 * 1000);
 
@@ -761,7 +1840,6 @@ static void find_dev(libusb_device **devs)
           uint32_t claim_result = libusb_claim_interface(handle, 0);
           printf ("ibusb_claim_interface(): %s\n", claim_result ? "failed" : "passed");
           usleep(1000 * 1000);
-
 
 /*
 ASYNC - https://vovkos.github.io/doxyrest/samples/libusb/group_libusb_asyncio.html
@@ -805,26 +1883,20 @@ We can view asynchronous I/O as a 5 step process:
 
           for (int c = 0; c < EVENT_IN_BUFFER_COUNT; c++)
           {
-              printf("A\n");
-
               printf("<><><><> libusb_fill_interrupt_transfer() <><><><>\n");
 
               // configure event_in handlers
               libusb_fill_interrupt_transfer(event_in_transfer[c], handle, event_in_addr,
                       hci_event_in_buffer[c], HCI_ACL_BUFFER_SIZE, async_callback, NULL, 0);
 
-              printf("B\n");
-
               // STEP 3 - submission
 
               r = libusb_submit_transfer(event_in_transfer[c]);
-              printf("C\n");
-              if (r) {
-
-                  printf("D\n");
-
+              if (r)
+              {
                   printf("Error submitting interrupt transfer %d", r);
                   libusb_exit(NULL);
+
                   return;
               }
 
@@ -1093,7 +2165,9 @@ int main(void)
 
     r = libusb_init(&context);
 
+#if 0
     libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
+#endif
 
     if (r < 0)
         return r;
@@ -1106,15 +2180,9 @@ int main(void)
 
     find_dev(devs);
 
-    printf("AA\n");
-
     libusb_free_device_list(devs, 1);
 
-    printf("BB\n");
-
     libusb_exit(NULL);
-
-    printf("CC\n");
 
     return 0;
 }

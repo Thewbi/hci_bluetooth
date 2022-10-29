@@ -50,6 +50,8 @@ libusb_device_handle* handle = NULL;
 
 libusb_context* context = NULL;
 
+uint32_t wait = 20;
+
 // libusb_control_transfer() request types
 #define GET_STATUS 0x00
 #define CLEAR_FEATURE 0x01
@@ -309,7 +311,7 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 
 void dump_hci_event(struct libusb_transfer *transfer)
 {
-  //printf("HCI-Event\n");
+  printf("dump_hci_event()\n");
 
   uint8_t idx = 0;
 
@@ -333,6 +335,10 @@ void dump_hci_event(struct libusb_transfer *transfer)
   uint16_t temp;
 
   uint8_t acl_connection_data_channels;
+
+  unsigned char buffer[1024];
+
+  printf("A\n");
 
   switch (event_code)
   {
@@ -358,10 +364,10 @@ void dump_hci_event(struct libusb_transfer *transfer)
         fprintf(stdout, "%02X%s", transfer->buffer[i], ( i + 1 ) % 16 == 0 ? "\n" : "" );
       }
       printf("\n");
-
       break;
 
     case HCI_EVENT_TRANSFER_COMPLETE:
+      printf("HCI_EVENT_TRANSFER_COMPLETE\n");
       break;
 
     case 0x03:
@@ -418,6 +424,258 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
       break;
 
+    // 0B 20 0A 00 06 00 01 00 0A 02 02 00 02 00
+    // 0B 20 0A 00   aclLength(06 00)   aclChannel(01 00)       0A 02 02 00 02 00
+    case 0x0B:
+      printf("L2CAP - ACL received!\n");
+
+      uint8_t header_byte_2 = transfer->buffer[idx++];
+
+      // data total length
+      uint8_t data_total_length_lower = transfer->buffer[idx++];
+      uint8_t data_total_length_upper = transfer->buffer[idx++];
+      uint8_t data_total_length = (data_total_length_upper << 8) + data_total_length_lower;
+      printf("data_total_length: 0x%04x\n", data_total_length);
+
+      // wrapped l2cap packet length
+      uint8_t l2cap_length_lower = transfer->buffer[idx++];
+      uint8_t l2cap_length_upper = transfer->buffer[idx++];
+      uint8_t l2cap_length = (l2cap_length_upper << 8) + l2cap_length_lower;
+      printf("l2cap_length: 0x%04x\n", l2cap_length);
+
+      uint8_t l2cap_signaling_channel_lower = transfer->buffer[idx++];
+      uint8_t l2cap_signaling_channel_upper = transfer->buffer[idx++];
+      uint8_t l2cap_signaling_channel = (l2cap_signaling_channel_upper << 8) + l2cap_signaling_channel_lower;
+      printf("l2cap_signaling_channel: 0x%04x\n", l2cap_signaling_channel);
+
+      uint8_t l2cap_command_code = transfer->buffer[idx++];
+      printf("l2cap_command_code: 0x%02x\n", l2cap_command_code);
+
+      uint8_t l2cap_command_identifier = transfer->buffer[idx++];
+      printf("l2cap_command_identifier: 0x%02x\n", l2cap_command_identifier);
+
+      uint8_t l2cap_command_length_lower = transfer->buffer[idx++];
+      uint8_t l2cap_command_length_upper = transfer->buffer[idx++];
+      uint8_t l2cap_command_length = (l2cap_command_length_upper << 8) + l2cap_command_length_lower;
+      printf("l2cap_command_length: 0x%04x\n", l2cap_command_length);
+
+      uint8_t l2cap_information_type_lower = transfer->buffer[idx++];
+      uint8_t l2cap_information_type_upper = transfer->buffer[idx++];
+      uint8_t l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
+      printf("l2cap_information_type: 0x%04x\n", l2cap_information_type);
+
+      switch (l2cap_command_code) {
+
+        case 0x02:
+          printf("l2cap_command_code: connection request\n");
+
+          uint8_t l2cap_source_cid_lower = transfer->buffer[idx++];
+          uint8_t l2cap_source_cid_upper = transfer->buffer[idx++];
+          uint8_t l2cap_source_cid = (l2cap_source_cid_upper << 8) + l2cap_source_cid_lower;
+          printf("l2cap_source_cid: 0x%04x\n", l2cap_source_cid);
+
+          // response
+
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x0b;
+          buffer[idx++] = 0x00;
+
+          // data total length
+          buffer[idx++] = 0x10;
+          buffer[idx++] = 0x00;
+
+          // length of lcap packet
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x00;
+
+          // signaling channel 0x0001
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x00;
+
+          // command code - connection response
+          buffer[idx++] = 0x03;
+
+          // command identifier
+          buffer[idx++] = 0x04;
+
+          // command length
+          buffer[idx++] = 0x08;
+          buffer[idx++] = 0x00;
+
+          // destination CID - our own randomly choosen CID
+          buffer[idx++] = 0x40;
+          buffer[idx++] = 0x00;
+
+          // source CID
+          // buffer[idx++] = 0x44;
+          // buffer[idx++] = 0x00;
+          buffer[idx++] = l2cap_source_cid_lower;
+          buffer[idx++] = l2cap_source_cid_upper;
+
+          // result success
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+
+          // status (0x0000 = no further information)
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+
+          break;
+
+        case 0x04:
+          printf("l2cap_command_code: configure request\n");
+
+          // response is
+          // 0b 00 12 00 0e 00 01 00 05 05 0a 00 4b 00 00 00 00 00 01 02 9b 06
+
+          if (l2cap_information_type == 0x02) {
+              printf("l2cap_command_code: configure request - extended features mask\n");
+          } else if (l2cap_information_type == 0x03) {
+              printf("l2cap_command_code: configure request - ???\n");
+          }
+
+/*
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          int idx = 0;
+          buffer[idx++] = 0x0b;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x12;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x0e;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x05;
+          buffer[idx++] = 0x05;
+          buffer[idx++] = 0x0a;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x4b;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x02;
+          buffer[idx++] = 0x9b;
+          buffer[idx++] = 0x06;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+*/
+
+          break;
+
+        case 0x0A:
+          // L2CAP - information request
+          printf("l2cap_command_code: information request\n");
+
+          // response
+          // 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
+          // 0b 00 10 00 0c 00 01 00 0b 02 08 00 02 00 00 00 80 02 00 00
+
+          if (l2cap_information_type == 0x02) {
+              printf("l2cap_command_code: configure request - extended features mask\n");
+
+              for (int i = 0; i < 1024; ++i) {
+                buffer[i] = 0x00;
+              }
+              buffer[idx++] = 0x0b;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x10;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x0c;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x01;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x0b;
+              buffer[idx++] = 0x02;
+              buffer[idx++] = 0x08;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x02;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x80;
+              buffer[idx++] = 0x02;
+              buffer[idx++] = 0x00;
+              buffer[idx++] = 0x00;
+
+              usleep(wait * 1000);
+              usb_send_cmd_packet(buffer, idx);
+
+              transfer->user_data = NULL;
+              libusb_submit_transfer(transfer);
+
+          } else if (l2cap_information_type == 0x03) {
+              printf("l2cap_command_code: configure request - ???\n");
+          }
+
+/*
+          for (int i = 0; i < 1024; ++i) {
+            buffer[i] = 0x00;
+          }
+
+          buffer[idx++] = 0x0b;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x14;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x10;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x01;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x0b;
+          buffer[idx++] = 0x03;
+          buffer[idx++] = 0x0c;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x03;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x06;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+          buffer[idx++] = 0x00;
+
+          usleep(wait * 1000);
+          usb_send_cmd_packet(buffer, idx);
+
+          transfer->user_data = NULL;
+          libusb_submit_transfer(transfer);
+*/
+          break;
+
+        default:
+          printf("l2cap_command_code: UNKNOWN (0x%02x)\n", l2cap_command_code);
+          break;
+      }
+
+      break;
+
+    // case 0x0C:
+    //   printf("ACL received!\n");
+    //   break;
+
     case 0x04:
       printf("CONNECTION REQUEST received!\n");
 
@@ -452,7 +710,9 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
       // 00 09 04 07 ab 8a 0f a3 5f 70 01
 
-      unsigned char buffer[1024];
+      printf("Send Sent Accept Connection Request ...\n");
+
+      //unsigned char buffer[1024];
       for (int i = 0; i < 1024; ++i) {
         buffer[i] = 0x00;
       }
@@ -469,7 +729,7 @@ void dump_hci_event(struct libusb_transfer *transfer)
       buffer[idx++] = 0x70;
       buffer[idx++] = 0x01;
 
-      usleep(100 * 1000);
+      usleep(wait * 1000);
       usb_send_cmd_packet(buffer, idx);
 
       transfer->user_data = NULL;
@@ -479,8 +739,6 @@ void dump_hci_event(struct libusb_transfer *transfer)
       // 128	67.246620	70:5f:a3:0f:8a:ab ()	Cc&CTech_7d:0e:96 (SPP Counter 5C:F3:70:7D:0E:96)	L2CAP	15	Rcvd Information Request (Extended Features Mask)
       // 0B 20 0A 00 06 00 01 00 0A 02 02 00 02 00
 
-      ???
-
       // It is answered with:
       // 129	67.246677	Cc&CTech_7d:0e:96 (SPP Counter 5C:F3:70:7D:0E:96)	70:5f:a3:0f:8a:ab ()	L2CAP	21	Sent Information Response (Extended Features Mask, Success)
       // 02 0b 00 10 00 0c 00 01 00 0b 02 08 00 02 00 00 00 80 02 00 00
@@ -489,19 +747,35 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
     // Core_V4.0.pdf - 7.7.14 Command Complete Event - page 732 of 1114
     case HCI_EVENT_CODE_COMMAND_COMPLETE:
-      //printf("COMMAND COMPLETE\n");
+      printf("HCI_EVENT_CODE_COMMAND_COMPLETE\n");
 
       // This is the return parameter(s) for the command specified in the
       // Command_Opcode event parameter. See each command’s definition for
       // the list of return parameters associated with that command.
 
+      printf("A \n");
+
+      if (transfer == NULL) {
+        printf("transfer is NULL \n");
+      } else {
+        printf("transfer->length %d \n", transfer->length);
+        printf("transfer->actual_length %d \n", transfer->actual_length);
+        printf("transfer->buffer %d \n", transfer->buffer);
+      }
+
       // parameter total length
+      printf("accessing buffer ...\n");
       parameter_total_length = transfer->buffer[idx++];
+      printf("accessing buffer done.\n");
       //printf("parameter_total_length: 0x%02x\n", parameter_total_length);
+
+      printf("B\n");
 
       // number of allowed command packets
       num_HCI_command_packets = transfer->buffer[idx++];
       //printf("num_HCI_command_packets: 0x%02x\n", num_HCI_command_packets);
+
+      printf("C\n");
 
       // command opcode
       code_lower = transfer->buffer[idx++];
@@ -509,9 +783,11 @@ void dump_hci_event(struct libusb_transfer *transfer)
       command_opcode = (code_upper << 8) + code_lower;
       //printf("command_opcode: 0x%04x\n", command_opcode);
 
+      printf("D\n");
+
+      printf("switch command_opcode\n");
       switch (command_opcode)
       {
-
         case HCI_Write_Page_Timeout:
           printf("Response to HCI_Write_Page_Timeout\n");
           break;
@@ -828,7 +1104,6 @@ void dump_hci_event(struct libusb_transfer *transfer)
           printf("Response to UNKNOWN command\n");
           break;
       }
-
       break;
 
     default:
@@ -902,7 +1177,7 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
 {
   printf("\n\n\n");
 
-  uint32_t wait = 300;
+
 
 #if 0
     printf("async_callback() main.c\n");
@@ -951,11 +1226,27 @@ LIBUSB_CALL static void async_callback(struct libusb_transfer *transfer)
     {
         //printf("LIBUSB_TRANSFER_COMPLETED\n");
 
+        //printf("<<< transfer->type: ", transfer->type);
+
+        // dump raw data
         printf("<<< ");
-        for (int i = 0; i < transfer->actual_length; ++i) {
-          fprintf(stdout, "%02X%s", transfer->buffer[i], ( i + 1 ) % 16 == 0 ? "\r\n" : " " );
+        for (int i = 0; i < transfer->actual_length; i++) {
+          fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : " ");
         }
         printf("\n");
+
+
+        // switch () {
+        //   case 0x03:
+        //     break;
+
+        //   case 0x0C:
+        //     break;
+        // }
+
+      //   case 0x03:
+      // printf("ACL Request received!\n");
+      // break;
 
         dump_hci_event(transfer);
 
@@ -1765,7 +2056,7 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
     return 0;
 }
 
-static void find_dev(libusb_device **devs)
+static uint8_t find_dev(libusb_device **devs)
 {
     libusb_device *dev;
     int i = 0, j = 0;
@@ -1780,7 +2071,9 @@ static void find_dev(libusb_device **devs)
         int r = libusb_get_device_descriptor(dev, &desc);
         if (r < 0) {
             fprintf(stderr, "failed to get device descriptor");
-            return;
+
+            libusb_exit(NULL);
+            return 0;
         }
 
         ret = libusb_open(dev, &handle);
@@ -1837,9 +2130,21 @@ static void find_dev(libusb_device **devs)
           // printf ("libusb_set_configuration(): %s\n", status ? "failed" : "passed");
           // usleep(1000 * 1000);
 
+
           uint32_t claim_result = libusb_claim_interface(handle, 0);
           printf ("ibusb_claim_interface(): %s\n", claim_result ? "failed" : "passed");
+          if (claim_result)
+          {
+            printf("libusb_close() - closing handle ...\n");
+            libusb_close(handle);
+            context = NULL;
+            printf("libusb_close() - closing handle done\n");
+            libusb_exit(NULL);
+
+            return 0;
+          }
           usleep(1000 * 1000);
+
 
 /*
 ASYNC - https://vovkos.github.io/doxyrest/samples/libusb/group_libusb_asyncio.html
@@ -1861,8 +2166,14 @@ We can view asynchronous I/O as a 5 step process:
               event_in_transfer[c] = libusb_alloc_transfer(0);
               if (!event_in_transfer[c])
               {
+                libusb_release_interface(handle, 0);
+                  printf("libusb_close() - closing handle ...\n");
+                  libusb_close(handle);
+                  context = NULL;
+                  printf("libusb_close() - closing handle done\n");
                   libusb_exit(NULL);
-                  return;
+
+                  return 0;
               }
           }
           for (c = 0; c < ACL_IN_BUFFER_COUNT; c++)
@@ -1871,8 +2182,14 @@ We can view asynchronous I/O as a 5 step process:
               acl_in_transfer[c] = libusb_alloc_transfer(0);
               if (!acl_in_transfer[c])
               {
+                  libusb_release_interface(handle, 0);
+                  printf("libusb_close() - closing handle ...\n");
+                  libusb_close(handle);
+                  context = NULL;
+                  printf("libusb_close() - closing handle done\n");
                   libusb_exit(NULL);
-                  return;
+
+                  return 0;
               }
           }
 
@@ -1885,22 +2202,34 @@ We can view asynchronous I/O as a 5 step process:
           {
               printf("<><><><> libusb_fill_interrupt_transfer() <><><><>\n");
 
+              printf("libusb_fill_interrupt_transfer() ...\n");
               // configure event_in handlers
               libusb_fill_interrupt_transfer(event_in_transfer[c], handle, event_in_addr,
                       hci_event_in_buffer[c], HCI_ACL_BUFFER_SIZE, async_callback, NULL, 0);
+              printf("libusb_fill_interrupt_transfer() done.\n");
 
               // STEP 3 - submission
 
+              printf("libusb_submit_transfer() ...\n");
               r = libusb_submit_transfer(event_in_transfer[c]);
               if (r)
               {
-                  printf("Error submitting interrupt transfer %d", r);
+                  printf("libusb_submit_transfer() - Error submitting interrupt transfer %d\n", r);
+
+                  libusb_release_interface(handle, 0);
+                  printf("libusb_close() - closing handle ...\n");
+                  libusb_close(handle);
+                  context = NULL;
+                  printf("libusb_close() - closing handle done\n");
                   libusb_exit(NULL);
 
-                  return;
+                  return 0;
               }
+              printf("libusb_submit_transfer() done.\n");
 
+              printf("print_transfer_status() ...\n");
               print_transfer_status(event_in_transfer[c]);
+              printf("print_transfer_status() done.\n");
           }
 
           for (int c = 0; c < ACL_IN_BUFFER_COUNT; c++)
@@ -1913,8 +2242,15 @@ We can view asynchronous I/O as a 5 step process:
               r = libusb_submit_transfer(acl_in_transfer[c]);
               if (r) {
                   printf("Error submitting bulk in transfer %d\n", r);
+
+                  libusb_release_interface(handle, 0);
+                  printf("libusb_close() - closing handle ...\n");
+                  libusb_close(handle);
+                  context = NULL;
+                  printf("libusb_close() - closing handle done\n");
                   libusb_exit(NULL);
-                  return;
+
+                  return 0;
               }
 
               print_transfer_status(acl_in_transfer[c]);
@@ -1936,7 +2272,7 @@ We can view asynchronous I/O as a 5 step process:
 
           usb_send_cmd_packet(buffer, idx);
 
-          usleep(100 * 1000);
+          usleep(30 * 1000);
 
           // // wait for aync operation to return an event
           // for (int j = 0; j < 10; j++) {

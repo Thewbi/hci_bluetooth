@@ -1,0 +1,31 @@
+= Setup =
+
+This setup will create a Visual Studio project using libusb.
+
+https://stackoverflow.com/questions/16458575/are-there-c-examples-available-for-libusb-h
+
+== Download ==
+
+Download the precompiled binary from https://libusb.info/ > Downloads > Latest Windows Binaries
+
+Unzip the file. (C:\aaa_se\hci_bluetooth\win32\libusb-1.0.26-binaries\VS2015-x64)
+It contains a folder VS2015-x64 for 64bit binaries.
+The weird thing is, the VS2015 folders do not contain a libusb.h file!
+
+Try 1 - Solution - clone https://github.com/libusb/libusb.git and use C:\aaa_se\libusb\libusb\libusb.h
+
+
+Visual Studio 
+File > New > Project > Visual C++ > Konsolen-App
+Name: libusb_test
+Folder: C:\aaa_se\hci_bluetooth\win32\visual_studio\libusb_test
+
+Switch the Run Configuration to Debug x64 using the drop down in the toolbar.
+
+Projekt im Projektbaum markieren > Eigenschaften
+VC++-Verzeichnisse > 
+Includeverzeichnisse > Bearbeiten > Neue Zeile > Doppelklick neue Zeile > ... Button > Ordner auswählen: C:\aaa_se\libusb\libusb > ok
+Bibliotheksverzeichnisse > Bearbeiten > Neue Zeile > Doppelklick neue Zeile > ... Button > Ordner auswählen: C:\aaa_se\hci_bluetooth\win32\libusb-1.0.26-binaries\VS2015-x64\lib
+
+
+Linker > Eingabe > Zusätzliche Abhängigkeiten > libusb-1.0.lib > Übernehmen > OK

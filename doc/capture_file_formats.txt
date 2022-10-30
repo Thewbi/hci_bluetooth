@@ -1,0 +1,30 @@
+5.3.2. Output File Formats
+Wireshark can save the packet data in its native file format (pcapng) and in the file formats of other protocol analyzers so other tools can read the capture data.
+
+[Note]	Saving in a different format might lose data
+Saving your file in a different format might lose information such as comments, name resolution, and time stamp resolution. See Section 7.6, “Time Stamps” for more information on time stamps.
+
+The following file formats can be saved by Wireshark (with the known file extensions):
+
+pcapng (*.pcapng). A flexible, extensible successor to the libpcap format. Wireshark 1.8 and later save files as pcapng by default. Versions prior to 1.8 used libpcap.
+pcap (*.pcap). The default format used by the libpcap packet capture library. Used by tcpdump, _Snort, Nmap, Ntop, and many other tools.
+Accellent 5Views (*.5vw)
+captures from HP-UX nettl ({asterisktrc0,*.trc1)
+Microsoft Network Monitor - NetMon (*.cap)
+Network Associates Sniffer - DOS (*.cap,*.enc,*.trc,*.fdc,*.syc)
+Cinco Networks NetXray captures (*.cap)
+Network Associates Sniffer - Windows (*.cap)
+Network Instruments/Viavi Observer (*.bfr)
+Novell LANalyzer (*.tr1)
+Oracle (previously Sun) snoop (*.snoop,*.cap)
+Visual Networks Visual UpTime traffic (*.*)
+Symbian OS btsnoop captures (*.log)
+Tamosoft CommView captures (*.ncf)
+Catapult (now Ixia/Keysight) DCT2000 .out files (*.out)
+Endace Measurement Systems’ ERF format capture(*.erf)
+EyeSDN USB S0 traces (*.trc)
+Tektronix K12 text file format captures (*.txt)
+Tektronix K12xx 32bit .rf5 format captures (*.rf5)
+Android Logcat binary logs (*.logcat)
+Android Logcat text logs (*.*)
+Citrix NetScaler Trace files (*.cap)

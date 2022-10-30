@@ -25,7 +25,39 @@ Switch the Run Configuration to Debug x64 using the drop down in the toolbar.
 Projekt im Projektbaum markieren > Eigenschaften
 VC++-Verzeichnisse > 
 Includeverzeichnisse > Bearbeiten > Neue Zeile > Doppelklick neue Zeile > ... Button > Ordner auswählen: C:\aaa_se\libusb\libusb > ok
-Bibliotheksverzeichnisse > Bearbeiten > Neue Zeile > Doppelklick neue Zeile > ... Button > Ordner auswählen: C:\aaa_se\hci_bluetooth\win32\libusb-1.0.26-binaries\VS2015-x64\lib
+Bibliotheksverzeichnisse > Bearbeiten > Neue Zeile > Doppelklick neue Zeile > ... Button > Ordner auswählen: C:\aaa_se\hci_bluetooth\windows\libusb-1.0.26-binaries\VS2015-x64\lib
 
 
 Linker > Eingabe > Zusätzliche Abhängigkeiten > libusb-1.0.lib > Übernehmen > OK
+
+
+= ZADIG =
+
+https://github.com/libusb/libusb/issues/370
+
+If you get the error LIBUSB_ERROR_NOT_SUPPORTED when calling libusb_open on windows,
+install ZADIG and let it replace the driver for the ASUS BT400 Broadcom device!
+
+https://zadig.akeo.ie/
+
+After doing this, no libusb_open() errors happen and the transfers are allocated and submitted correctly!
+
+
+
+
+
+== SPP Service Setup ==
+
+https://bluekitchen-gmbh.com/btstack/examples/generated/#sec:sppcounterExample
+
+To provide an SPP service, the L2CAP, RFCOMM, and SDP protocol layers are required. 
+After setting up an RFCOMM service with channel nubmer RFCOMM_SERVER_CHANNEL, 
+an SDP record is created and registered with the SDP server. 
+
+Example code for SPP service setup is provided in Listing here. 
+The SDP record created by function sdp_create_spp_service consists 
+of a basic SPP definition that uses the provided RFCOMM channel ID and service name. 
+
+For more details, please have a look at it in \path{src/sdp_util.c}. 
+The SDP record is created on the fly in RAM and is deterministic. 
+To preserve valuable RAM, the result could be stored as constant data inside the ROM.

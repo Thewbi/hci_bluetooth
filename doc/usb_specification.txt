@@ -1,0 +1,89 @@
+https://www.bluetooth.com/specifications/specs/core-specification-4-0/
+
+
+
+
+== Sequence Diagramms ==
+
+BLUETOOTH SPECIFICATION Version 4.0 [Vol 2] page 885 of 1114
+
+Message Sequence Charts
+
+3  ACL CONNECTION ESTABLISHMENT AND DETACHMENT
+
+
+Figure 3.1:  Overview diagram for connection setup.
+
+Step 1: 	Create Connection
+Step 2:		Features Exchange
+Step 3: 	Connection Request
+Step 4: 	Optional Role Switch
+Step 5: 	Optional AFH
+Step 6: 	Optional Security
+Step 7a: 	Optional Pairing
+Step 7b: 	Optional Authentication
+Step 8: 	Optional Encryption 
+Step 9: 	SetupComplete
+------------------------------------
+OptionalDataFlow
+------------------------------------
+Step 10: 	Disconnection
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+7.1.5  Create Connection Command
+
+BLUETOOTH SPECIFICATION Version 4.0 [Vol 2] page 466 of 1114
+
+Create_Connection
+
+Command: HCI_Create_Connection
+
+OCF: 0x0005
+
+Command Parameters:
+BD_ADDR,
+Packet_Type,
+Page_Scan_Repetition_Mode,
+Reserved,
+Clock_Offset,
+Allow_Role_Switch
+
+
+Return Parameters:
+N/A
+
+
+
+
+== HCI EVENT - Connection Request event ==
+
+04 0A AB 8A 0F A3 5F 70 0C 02 5A 01
+
+04 - HCI event 
+0A - Length of data (0x0A = 10 byte) 
+AB 8A 0F A3 5F 70 - BD-ADDR (reverse order: 70:5F:A3:0F:8A:AB)
+0C 02 5A - class_of_device (reverse order: 5A:02:0C)
+Link Type: acl_connection_data_channels: 01
+
+
+BT ADDR 
+BT400: 		5C:F3:70:7D:0E:96
+DE7487M: 	D0:C6:37:A1:2A:EC
+MacBook:	6C:40:08:97:D1:13
+RedmiNote:	70:5F:A3:0F:8A:AB
+			
+
+
+https://www.sharetechnote.com/html/Bluetooth_Protocol.html#Protocol_Ex01_9_Accept_Connection_Request

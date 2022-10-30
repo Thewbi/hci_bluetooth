@@ -1,0 +1,52 @@
+zero at the end missing
+prefix a 0x01 for command
+
+
+
+
+
+04 0A AB 8A 0F A3 5F 70 0C 02 5A 01
+
+04 - event
+0A - length of data (6 + 3 + 1 == 10)
+AB 8A 0F A3 5F 70 - BD_ADDR
+0C 02 5A - class_of_device
+01 - Link Type: acl_connection_data_channels
+
+
+
+
+
+E8 03 00 00 E8 03 00 00 11 00 00 00 11 00 00 00 00 00 00 01 04 04 0A FA 2E 07 6D 0E 00 04 02 6A 01
+
+
+== working rvcd connection request event ==
+D4 C3 B2 A1 02 00 04 00 00 00 00 00 00 00 00 00 00 04 00 00 C9 00 00 00 E8 03 00 00 E8 03 00 00 11 00 00 00 11 00 00 00 00 00 00 01 04 04 0A FA 2E 07 6D 0E 00 04 02 6A 01
+
+-- pcap file header
+D4 C3 B2 A1 - magic (4 byte)
+02 00 - version major (2 byte)
+04 00 - version minor (2 byte)
+00 00 00 00 - thiszone
+00 00 00 00 - sigfigs
+00 04 00 00 - snaplen
+C9 00 00 00 - network
+-- record header
+E8 03 00 00 - ts_sec
+E8 03 00 00 - ts_usec
+11 00 00 00 - incl_len - this is the length of all data that follows this record handler
+11 00 00 00 - orig_len - set it to the same value as the incl_len
+
+00 00 00 01 - Direction (4 Byte) 0 - Sent, 1 - Received
+
+04 - HCI type (1 byte) (0x01 - HCI command, 0x02 - Asynchronous Data (ACL),  0x03 - Synchronous Data (SCO), 0x04 - HCI event, 0x09 - Extended Command  
+
+04 0A FA 2E 07 6D 0E 00 04 02 6A 01 - payload as seen by the HCI host
+
+
+
+l2cap command - connection request
+7.7.4  Connection Request Event
+BLUETOOTH SPECIFICATION Version 4.0 [Vol 2] page 719 of 1114
+
+0B 20 0C 00 08 00 01 00 02 03 04 00 01 00 41 00

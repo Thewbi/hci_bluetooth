@@ -1,3 +1,5 @@
+#pragma once
+
 // https://wiki.wireshark.org/Development/LibpcapFileFormat
 
 #include <stdint.h>

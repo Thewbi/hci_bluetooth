@@ -1,0 +1,60 @@
+
+When a controller starts inquiry, nearby controllers will answer with their MAC addr.
+The HCI inquiry command is a longrunning process.
+The controller will therefore send a command status event to the host to inform
+the host if the command could be started or not.
+One possible outcome is that the host has requested parameters that the controller
+cannot support. In this case a status command request with a error_code of 0x12
+"Invalid HCI Command Parameters" is returned by the controller.
+If the command could be started an error_code of 0x00 is returned, which denotes
+success.
+
+
+
+02 0F 01 F7 1C F6 0F 6B 88 01 00 00 00 1F 00 79 09
+
+02 - event code - 0x02 - inquiry result
+0F - parameter total length (15d)
+01 - number of responses
+F7 1C F6 0F 6B 88 - BDADDR - reverse: 88:6B:0F:F6:1C:F7
+01 - Page Scan Repetition Mode: (0x01 = R1) 
+00 - Page Scan Period Mode: (0x00 = P0) 
+00 - Page Scan Mode: (0x00 = Mandatory) 
+00 1F 00 - Class of device
+79 09 - clock offset
+
+
+02 0F 01 13 D1 97 08 40 6C 01 00 00 0C 01 38 02 60
+
+02 - event code - 0x02 - inquiry result
+0F - parameter total length
+01 - number of responses 
+13 D1 97 08 40 6C - BDADDR - reverse: 6C:40:08:97:D1:13
+01 - Page Scan Repetition Mode: (0x01 = R1) 
+00 - Page Scan Period Mode: (0x00 = P0) 
+00 - Page Scan Mode: (0x00 = Mandatory) 
+0C 01 38 - Class of device
+02 60 - clock offset
+
+
+
+BLUETOOTH SPECIFICATION Version 4.0 [Vol 2] page 733 of 1114
+Host Controller Interface Functional Specification
+7.7.15  Command Status Event
+
+0F 04 00 01 01 04
+
+
+
+
+BLUETOOTH SPECIFICATION Version 4.0 [Vol 2] page 733 of 1114
+Host Controller Interface Functional Specification
+7.7.15  Command Status Event
+
+0F 04 12 01 01 04
+
+0F - command status
+04 - parameter total length
+12 - status ??? 0x12 Invalid HCI Command Parameters
+01 - number of allowed packets
+01 04 - opcode that cause this event

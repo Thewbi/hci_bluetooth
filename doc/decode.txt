@@ -50,3 +50,10 @@ l2cap command - connection request
 BLUETOOTH SPECIFICATION Version 4.0 [Vol 2] page 719 of 1114
 
 0B 20 0C 00 08 00 01 00 02 03 04 00 01 00 41 00
+
+
+
+
+
+
+

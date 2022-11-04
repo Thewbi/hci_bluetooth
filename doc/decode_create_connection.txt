@@ -1,0 +1,55 @@
+
+https://community.infineon.com/t5/AIROC-Bluetooth/CYBT-343026-EVAL-enable-SCO-PCM/td-p/360070
+
+Create_Connection
+HCI Command
+com21@115200
+
+[05 04 0D ]: 35 92 02 5B 02 00 18 CC 01 00 00 00 00
+opcode = 0x0405 (1029, "Create_Connection")
+BD_ADDR = "00025B029235"
+Packet_Type = 0xCC18 (52248, "DM1 | DH1 | DM3 | DH3 | DM5 | DH5")
+Page_Scan_Repetition_Mode = 0x1 (1, "R1")
+Page_Scan_Mode = 0x0 (0, "Mandatory")
+Clock_Offset_Valid = 0x00 (0)
+Clock_Offset = 0x00 (0)
+Allow_Role_Switch = 0x0 (0)
+
+05 04 - command code
+0D - total length of parameters
+35 92 02 5B 02 00 - BD ADDR
+18 CC - Packet_Type
+01 - Page_Scan_Repetition_Mode
+00 - Page_Scan_Mode 
+00 00 - Clock_Offset
+00 - Allow_Role_Switch
+
+
+
+Response:
+
+0F 04 00 01 05 04
+ 
+0F - command status
+04 - parameter total length
+00 - status ??? 0x00 success
+01 - number of allowed packets
+05 04 - opcode that cause this event
+
+
+
+== Connect complete (Event) ==
+
+03 0B 00 0B 00 13 D1 97 08 40 6C 01 00
+ 
+03 - event code: 0x03 == command complete
+0B - total length
+00 - status: 0x00 == success
+0B 00 - Connection Handle (2 byte) 0x000b
+13 D1 97 08 40 6C - BD ADDR of communication partner
+01 - link type 0x01 == ACL connection (Data Channels)
+00 - encryption type: 0x00 == encryption disabled
+
+
+
+1B 03 0B 00 05

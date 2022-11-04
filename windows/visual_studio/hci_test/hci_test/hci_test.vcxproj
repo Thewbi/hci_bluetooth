@@ -75,7 +75,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\aaa_se\hci_bluetooth\libpcap;C:\aaa_se\libusb\libusb;$(IncludePath)</IncludePath>
+    <IncludePath>C:\aaa_se\hci_bluetooth;C:\aaa_se\hci_bluetooth\apple_pklg;C:\aaa_se\hci_bluetooth\libpcap;C:\aaa_se\libusb\libusb;$(IncludePath)</IncludePath>
     <LibraryPath>C:\aaa_se\hci_bluetooth\windows\libusb-1.0.26-binaries\VS2015-x64\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -154,11 +154,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\..\apple_pklg\pklg.cpp" />
     <ClCompile Include="..\..\..\..\libpcap\libpcap.cpp" />
     <ClCompile Include="hci_test.cpp" />
+    <ClCompile Include="spp_client.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\..\apple_pklg\pklg.h" />
     <ClInclude Include="..\..\..\..\libpcap\libpcap.h" />
+    <ClInclude Include="command_template.h" />
+    <ClInclude Include="hci.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

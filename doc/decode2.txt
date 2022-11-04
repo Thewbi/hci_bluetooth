@@ -1,0 +1,253 @@
+27	0.001001	host		controller		HCI_CMD	4	Sent Reset
+29	0.001006	controller		host		HCI_EVT	7	Rcvd Command Complete (Reset)
+	
+30	0.001006	host		controller		HCI_CMD	4	Sent Read Local Version Information
+32	0.001007	controller		host		HCI_EVT	15	Rcvd Command Complete (Read Local Version Information)
+
+33	0.001007	host		controller		HCI_CMD	4	Sent Read Local Name
+35	0.001024	controller		host		HCI_EVT	255	Rcvd Command Complete (Read Local Name)
+
+36	0.001024	host		controller		HCI_CMD	4	Sent Read Local Supported Commands
+38	0.001030	controller		host		HCI_EVT	71	Rcvd Command Complete (Read Local Supported Commands)
+	
+39	0.001030	host		controller		HCI_CMD	4	Sent Read BD ADDR
+41	0.001032	controller		host		HCI_EVT	13	Rcvd Command Complete (Read BD ADDR)
+
+42	0.001032	host		controller		HCI_CMD	4	Sent Read Buffer Size
+44	0.001034	controller		host		HCI_EVT	14	Rcvd Command Complete (Read Buffer Size)
+
+45	0.001034	host		controller		HCI_CMD	4	Sent Read Local Supported Features
+47	0.001036	controller		host		HCI_EVT	15	Rcvd Command Complete (Read Local Supported Features)
+
+Request: Send "Set Event Mask"
+01 0c 08 ff ff ff ff ff ff ff 3f
+Response: 
+0e 04 01 01 0c 00
+
+0e - HCI Event Type 0x0e - command complete 
+04 - parameter total length
+01 - number of allowed command packets 
+01 0c - opcode that caused this event
+00 - success (0x00)
+
+Request: Send "Write Simple Pairing Mode"
+56 0c 01 01
+Response: 
+0e 04 01 56 0c 00
+
+Request: Send "Write Inquiry Mode"
+45 0c 01 00
+Response:
+0e 04 01 45 0c 00
+
+Sent Write Default Erroneous Data Reporting
+5b 0c 01 01
+Response
+0e 04 01 5b 0c 00
+
+60	0.001106	host		controller		HCI_CMD_BROADCOM	9	Sent Broadcom Write SCO PCM INT Parameter
+	
+63	0.001108	host		controller		HCI_CMD	4	Sent LE Read Buffer Size
+
+66	0.001111	host		controller		HCI_CMD	6	Sent Write LE Host Supported
+			
+69	0.001113	host		controller		HCI_CMD	12	Sent LE Set Event Mask
+
+72	0.001115	host		controller		HCI_CMD	4	Sent LE Read White List Size
+
+75	0.001116	host		controller		HCI_CMD	7	Sent Write Class of Device
+
+78	0.001119	host		controller		HCI_CMD	252	Sent Change Local Name
+	
+81	0.001122	host		controller		HCI_CMD	245	Sent Write Extended Inquiry Response
+		
+84	0.001124	host		controller		HCI_CMD	6	Sent Write Default Link Policy Settings
+			
+87	0.001126	host		controller		HCI_CMD	6	Sent Write Page Timeout
+				
+90	0.001129	host		controller		HCI_CMD	5	Sent Write Scan Enable
+					
+94	0.001131	host		controller		HCI_CMD	11	Sent LE Set Scan Parameters
+						
+98	0.001139	host		controller		HCI_CMD	4	Sent LE Rand
+101	0.001141	host		controller		HCI_CMD	4	Sent LE Rand
+98	0.001139	host		controller		HCI_CMD	4	Sent LE Rand
+101	0.001141	host		controller		HCI_CMD	4	Sent LE Rand
+98	0.001139	host		controller		HCI_CMD	4	Sent LE Rand
+101	0.001141	host		controller		HCI_CMD	4	Sent LE Rand
+98	0.001139	host		controller		HCI_CMD	4	Sent LE Rand
+101	0.001141	host		controller		HCI_CMD	4	Sent LE Rand
+98	0.001139	host		controller		HCI_CMD	4	Sent LE Rand
+101	0.001141	host		controller		HCI_CMD	4	Sent LE Rand
+98	0.001139	host		controller		HCI_CMD	4	Sent LE Rand
+101	0.001141	host		controller		HCI_CMD	4	Sent LE Rand
+
+Received connection request:
+This is the first event that arrives at the host without a prior command
+that causes this event. The host has not sent a command that causes this
+event! This event is caused by the controller. Hence, there is no field
+in the event data that lists the opcode that caused this event!
+
+How do we tell these two event types apart?
+Answer: by looking at the HCI Event Type field:
+
+connect_complete = 0x03, // event that is not caused by a prior command
+connect_request = 0x04, // event that is not caused by a prior command
+command_complete = 0x0e, // is received as a response to a prior command
+command_status = 0x0f, // event that is not caused by a prior command
+max_slots_changed = 0x1b, // event that is not caused by a prior command
+link_supervision_timeout_changed = 0x38, // event that is not caused by a prior command
+
+The fields are present in the "HCI Event Type: connect request event":
+[event]
+[parameter total length]
+
+These fields are missing in the "HCI Event Type: connect request event":
+[number of allowed command packets] 
+[opcode that caused this event]
+[success]
+
+04 0a ab 8a 0f a3 5f 70 0c 02 5a 01
+
+-- Bluetooth HCI Event
+04 - HCI Event Type: 0x04 - connect request 
+0a - parameter total length 
+ab 8a 0f a3 5f 70 - BD Addr of connecting device
+0c 02 5a - class of connecting device
+01 - link type. Value 0x01 = ACL Connection (Data Channels)
+
+135	0.013362	host		controller		HCI_CMD	11	Sent Accept Connection Request
+Request: 09 04 07 ab 8a 0f a3 5f 70 01
+Response: 0f 04 00 01 09 04
+
+138	0.013370	controller		host		HCI_EVT	14	Rcvd Connect Complete
+030b000b00ab8a0fa35f700100
+
+
+
+
+== L2CAP ==
+
+144	0.013389	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (SPP Counter 5C:F3:70:7D:0E:96)		L2CAP	15	Rcvd Information Request (Extended Features Mask)
+
+03 0b 20 0a 00 06 00 01 00 0a 02 02 00 02 00
+
+-- Packet Logger
+03 - PacketLogger (Received ACL Data)
+
+-- Bluetooth HCI ACL Packet
+0b 20 - ACL header
+0a 00 - Total length of data that follows, starting here
+
+-- Bluetooth L2CAP protocol
+06 00 - length of L2CAP command data
+01 00 - signaling channel
+
+-- L2CAP command data: information request
+0a - command code
+02 - command identifier 
+02 00 - command length
+02 00 - Information Type: Extended Feature Mask (0x0002)
+
+
+
+
+
+
+-- Bluetooth HCI ACL Packet
+0B 20  - ACL header
+10 00  - Total length of data that follows, starting here
+
+-- Bluetooth L2CAP protocol
+0C 00 - length of L2CAP command data
+01 00 - signaling channel
+
+-- L2CAP command data: configure request
+04  - command code - (configure request = 0x04)
+05  - command identifier 
+08 00 - command length
+40 00 00 00 
+01 (Maximum Transmission Unit 0x01 (MTU))
+02 Length 2
+00 04 (MTU in bytes 0x0400 == 1024d
+
+Response
+02 0b0012000e00010005050a004d000000000001020004
+
+
+
+
+
+
+-- Bluetooth HCI ACL Packet
+0B 20 
+0C 00 
+
+-- Bluetooth L2CAP protocol
+08 00 
+01 00 
+
+-- L2CAP command data:
+06 - command code
+06 - SCH Disconnection request
+04 00 - command length
+40 00 48 00
+
+
+
+
+0b 00 0c 00 08 00 01 00 07 06 04 00 41 00 4d 00
+
+
+
+
+
+<<< 0B 20 0E 00 0A 00 01 00 01 01 06 00 02 00 00 00 00 00
+
+
+
+0B 20 
+0E 00 
+
+0A 00 
+01 00 
+
+01 - command reject
+01 
+06 00 02 00 00 00 00 00
+
+
+
+
+
+0B 20 
+0A 00 
+
+06 00 - length
+01 00 - signaling channel
+
+0A - command code information request 0x0A
+03 - command identifier 
+02 00 - length
+03 00 - fixed channel support
+
+response:
+0b001400100001000b030c00030000000600000000000000
+
+
+
+
+
+
+
+== L2CAP example data for incoming L2CAP traffic (PacketLogger prefix removed) ==
+0b200a00060001000a0202000200
+0b200a00060001000a0302000300
+0b200c00080001000204040001004d00
+0b2010000c000100040508004100000001020004
+
+
+
+
+
+

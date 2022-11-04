@@ -19,6 +19,12 @@
     <Filter Include="Quelldateien\libpcap">
       <UniqueIdentifier>{8fd2b08f-2480-4eeb-9b44-092d592bb613}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Headerdateien\apple_pklg">
+      <UniqueIdentifier>{8bdd750a-1a6f-45be-91db-e57057f08e62}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Quelldateien\apple_pklg">
+      <UniqueIdentifier>{c0b37d1f-819e-4c93-9a94-bda46cc39ebb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="hci_test.cpp">
@@ -27,10 +33,25 @@
     <ClCompile Include="..\..\..\..\libpcap\libpcap.cpp">
       <Filter>Quelldateien\libpcap</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\..\apple_pklg\pklg.cpp">
+      <Filter>Quelldateien\apple_pklg</Filter>
+    </ClCompile>
+    <ClCompile Include="spp_client.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\libpcap\libpcap.h">
       <Filter>Headerdateien\libpcap</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\apple_pklg\pklg.h">
+      <Filter>Headerdateien\apple_pklg</Filter>
+    </ClInclude>
+    <ClInclude Include="hci.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="command_template.h">
+      <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

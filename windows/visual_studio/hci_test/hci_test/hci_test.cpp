@@ -1,33 +1,21 @@
 #include <string>
 #include <iostream>
 #include <iomanip>
+#include <fstream>
+
 #include <libusb.h>
 #include <windows.h>
+
 #include <map>
 #include <vector>
-#include <fstream>
+
+#include "hci.h"
+
 #include "libpcap.h"
+#include "pklg.h"
+#include <intrin.h>
 
-/**
- * packet types - used in BTstack and over the H4 UART interface
- */
-#define HCI_COMMAND_DATA_PACKET 0x01
-#define HCI_ACL_DATA_PACKET     0x02
-#define HCI_SCO_DATA_PACKET     0x03
-#define HCI_EVENT_PACKET        0x04
 
- // packet header sizes
-#define HCI_CMD_HEADER_SIZE          3
-#define HCI_ACL_HEADER_SIZE          4
-#define HCI_SCO_HEADER_SIZE          3
-#define HCI_EVENT_HEADER_SIZE        2
-
-// BTstack configuration. buffers, sizes, ...
-#define HCI_ACL_PAYLOAD_SIZE (1691 + 4)
-#define HCI_INCOMING_PRE_BUFFER_SIZE 14 // sizeof BNEP header, avoid memcpy
-
-// from hci.h
-#define HCI_ACL_BUFFER_SIZE        (HCI_ACL_HEADER_SIZE   + HCI_ACL_PAYLOAD_SIZE)
 
 // from btstack/platform/libusb/hci_transport_h2_libusb.c
 
@@ -37,9 +25,10 @@ static struct libusb_transfer *event_in_transfer[EVENT_IN_BUFFER_COUNT];
 #define ACL_IN_BUFFER_COUNT 3
 static struct libusb_transfer *acl_in_transfer[ACL_IN_BUFFER_COUNT];
 
-// incoming buffer for HCI Events and ACL Packets
+// incoming buffer for HCI Events
 static uint8_t hci_event_in_buffer[EVENT_IN_BUFFER_COUNT][HCI_ACL_BUFFER_SIZE];
 
+// incoming buffer for ACL Packets
 static uint8_t hci_acl_in_buffer[ACL_IN_BUFFER_COUNT][HCI_INCOMING_PRE_BUFFER_SIZE + HCI_ACL_BUFFER_SIZE];
 
 // outgoing buffer for HCI Command packets
@@ -57,22 +46,7 @@ libusb_context* context = NULL;
 
 uint32_t wait = 100;
 
-// libusb_control_transfer() request types
-#define GET_STATUS 0x00
-#define CLEAR_FEATURE 0x01
-#define SET_FEATURE 0x03
-#define SET_ADDRESS 0x05
-#define GET_DESCRIPTOR 0x06
-#define SET_DESCRIPTOR 0x07
-#define GET_CONFIGURATION 0x08
-#define SET_CONFIGURATION 0x09
 
-// descriptor types
-#define DEVICE_DESCRIPTOR 0x01
-#define CONFIGURATION_DESCRIPTOR 0x02
-#define INTERFACE_DESCRIPTOR 0x04
-#define ENDPOINT_DESCRIPTOR 0x05
-#define DEVICE_QUALIFIER_DESCRIPTOR 0x06
 
 // https://vovkos.github.io/doxyrest/samples/libusb/group_libusb_dev.html
 //
@@ -140,293 +114,16 @@ static int sco_in_addr;
 static int sco_out_addr;
 
 static int usb_send_cmd_packet(uint8_t *packet, int size);
+static int usb_send_acl_packet(uint8_t *packet, int size);
 
 int interface_number = 0;
 
 std::fstream file;
 char buffer[2048];
 
-// OGFs
-#define OGF_LINK_CONTROL  0x01
-#define OGF_LINK_POLICY  0x02
-#define OGF_CONTROLLER_BASEBAND  0x03
-#define OGF_INFORMATIONAL_PARAMETERS 0x04
-#define OGF_STATUS_PARAMETERS     0x05
-#define OGF_TESTING               0x06
-#define OGF_LE_CONTROLLER   0x08
-#define OGF_BTSTACK  0x3d
-#define OGF_VENDOR  0x3f
-
-// calculate hci opcode for ogf/ocf value
-#define HCI_OPCODE(ogf, ocf) ((ocf) | ((ogf) << 10))
-
-/**
- * compact HCI Command packet description
- */
-typedef struct {
-	uint16_t    opcode;
-	const char *format;
-} hci_cmd_t;
-
-typedef enum {
-
-	// Link Control
-	HCI_OPCODE_HCI_INQUIRY = HCI_OPCODE(OGF_LINK_CONTROL, 0x01),
-	HCI_OPCODE_HCI_INQUIRY_CANCEL = HCI_OPCODE(OGF_LINK_CONTROL, 0x02),
-	HCI_OPCODE_HCI_PERIODIC_INQUIRY_MODE = HCI_OPCODE(OGF_LINK_CONTROL, 0x03),
-	HCI_OPCODE_HCI_EXIT_PERIODIC_INQUIRY_MODE = HCI_OPCODE(OGF_LINK_CONTROL, 0x04),
-	HCI_OPCODE_HCI_CREATE_CONNECTION = HCI_OPCODE(OGF_LINK_CONTROL, 0x05),
-	HCI_OPCODE_HCI_DISCONNECT = HCI_OPCODE(OGF_LINK_CONTROL, 0x06),
-	HCI_OPCODE_HCI_CREATE_CONNECTION_CANCEL = HCI_OPCODE(OGF_LINK_CONTROL, 0x08),
-	HCI_OPCODE_HCI_ACCEPT_CONNECTION_REQUEST = HCI_OPCODE(OGF_LINK_CONTROL, 0x09),
-	HCI_OPCODE_HCI_REJECT_CONNECTION_REQUEST = HCI_OPCODE(OGF_LINK_CONTROL, 0x0a),
-	HCI_OPCODE_HCI_LINK_KEY_REQUEST_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x0b),
-	HCI_OPCODE_HCI_LINK_KEY_REQUEST_NEGATIVE_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x0c),
-	HCI_OPCODE_HCI_PIN_CODE_REQUEST_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x0d),
-	HCI_OPCODE_HCI_PIN_CODE_REQUEST_NEGATIVE_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x0e),
-	HCI_OPCODE_HCI_CHANGE_CONNECTION_PACKET_TYPE = HCI_OPCODE(OGF_LINK_CONTROL, 0x0f),
-	HCI_OPCODE_HCI_AUTHENTICATION_REQUESTED = HCI_OPCODE(OGF_LINK_CONTROL, 0x11),
-	HCI_OPCODE_HCI_SET_CONNECTION_ENCRYPTION = HCI_OPCODE(OGF_LINK_CONTROL, 0x13),
-	HCI_OPCODE_HCI_CHANGE_CONNECTION_LINK_KEY = HCI_OPCODE(OGF_LINK_CONTROL, 0x15),
-	HCI_OPCODE_HCI_REMOTE_NAME_REQUEST = HCI_OPCODE(OGF_LINK_CONTROL, 0x19),
-	HCI_OPCODE_HCI_REMOTE_NAME_REQUEST_CANCEL = HCI_OPCODE(OGF_LINK_CONTROL, 0x1A),
-	HCI_OPCODE_HCI_READ_REMOTE_SUPPORTED_FEATURES_COMMAND = HCI_OPCODE(OGF_LINK_CONTROL, 0x1B),
-	HCI_OPCODE_HCI_READ_REMOTE_EXTENDED_FEATURES_COMMAND = HCI_OPCODE(OGF_LINK_CONTROL, 0x1C),
-	HCI_OPCODE_HCI_READ_REMOTE_VERSION_INFORMATION = HCI_OPCODE(OGF_LINK_CONTROL, 0x1D),
-	HCI_OPCODE_HCI_SETUP_SYNCHRONOUS_CONNECTION = HCI_OPCODE(OGF_LINK_CONTROL, 0x0028),
-	HCI_OPCODE_HCI_ACCEPT_SYNCHRONOUS_CONNECTION = HCI_OPCODE(OGF_LINK_CONTROL, 0x0029),
-	HCI_OPCODE_HCI_IO_CAPABILITY_REQUEST_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x2b),
-	HCI_OPCODE_HCI_USER_CONFIRMATION_REQUEST_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x2c),
-	HCI_OPCODE_HCI_USER_CONFIRMATION_REQUEST_NEGATIVE_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x2d),
-	HCI_OPCODE_HCI_USER_PASSKEY_REQUEST_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x2e),
-	HCI_OPCODE_HCI_USER_PASSKEY_REQUEST_NEGATIVE_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x2f),
-	HCI_OPCODE_HCI_REMOTE_OOB_DATA_REQUEST_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x30),
-	HCI_OPCODE_HCI_REMOTE_OOB_DATA_REQUEST_NEGATIVE_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x33),
-	HCI_OPCODE_HCI_IO_CAPABILITY_REQUEST_NEGATIVE_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x34),
-	HCI_OPCODE_HCI_ENHANCED_SETUP_SYNCHRONOUS_CONNECTION = HCI_OPCODE(OGF_LINK_CONTROL, 0x3d),
-	HCI_OPCODE_HCI_ENHANCED_ACCEPT_SYNCHRONOUS_CONNECTION = HCI_OPCODE(OGF_LINK_CONTROL, 0x3e),
-	HCI_OPCODE_HCI_REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY = HCI_OPCODE(OGF_LINK_CONTROL, 0x45),
-
-	// Link Policy
-	HCI_OPCODE_HCI_HOLD_MODE = HCI_OPCODE(OGF_LINK_POLICY, 0x01),
-	HCI_OPCODE_HCI_SNIFF_MODE = HCI_OPCODE(OGF_LINK_POLICY, 0x03),
-	HCI_OPCODE_HCI_EXIT_SNIFF_MODE = HCI_OPCODE(OGF_LINK_POLICY, 0x04),
-	HCI_OPCODE_HCI_PARK_STATE = HCI_OPCODE(OGF_LINK_POLICY, 0x05),
-	HCI_OPCODE_HCI_EXIT_PARK_STATE = HCI_OPCODE(OGF_LINK_POLICY, 0x06),
-	HCI_OPCODE_HCI_QOS_SETUP = HCI_OPCODE(OGF_LINK_POLICY, 0x07),
-	HCI_OPCODE_HCI_ROLE_DISCOVERY = HCI_OPCODE(OGF_LINK_POLICY, 0x09),
-	HCI_OPCODE_HCI_SWITCH_ROLE_COMMAND = HCI_OPCODE(OGF_LINK_POLICY, 0x0b),
-	HCI_OPCODE_HCI_READ_LINK_POLICY_SETTINGS = HCI_OPCODE(OGF_LINK_POLICY, 0x0c),
-	HCI_OPCODE_HCI_WRITE_LINK_POLICY_SETTINGS = HCI_OPCODE(OGF_LINK_POLICY, 0x0d),
-	HCI_OPCODE_HCI_WRITE_DEFAULT_LINK_POLICY_SETTING = HCI_OPCODE(OGF_LINK_POLICY, 0x0F),
-	HCI_OPCODE_HCI_FLOW_SPECIFICATION = HCI_OPCODE(OGF_LINK_POLICY, 0x10),
-	HCI_OPCODE_HCI_SNIFF_SUBRATING = HCI_OPCODE(OGF_LINK_POLICY, 0x11),
-
-	// Controller Baseband
-	HCI_OPCODE_HCI_SET_EVENT_MASK = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x01),
-	HCI_OPCODE_HCI_RESET = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x03),
-	HCI_OPCODE_HCI_FLUSH = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x08),
-	HCI_OPCODE_HCI_READ_PIN_TYPE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x09),
-	HCI_OPCODE_HCI_WRITE_PIN_TYPE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x0A),
-	HCI_OPCODE_HCI_DELETE_STORED_LINK_KEY = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x12),
-	HCI_OPCODE_HCI_WRITE_LOCAL_NAME = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x13),
-	HCI_OPCODE_HCI_READ_LOCAL_NAME = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x14),
-	HCI_OPCODE_HCI_READ_PAGE_TIMEOUT = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x17),
-	HCI_OPCODE_HCI_WRITE_PAGE_TIMEOUT = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x18),
-	HCI_OPCODE_HCI_WRITE_SCAN_ENABLE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x1A),
-	HCI_OPCODE_HCI_READ_PAGE_SCAN_ACTIVITY = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x1B),
-	HCI_OPCODE_HCI_WRITE_PAGE_SCAN_ACTIVITY = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x1C),
-	HCI_OPCODE_HCI_READ_INQUIRY_SCAN_ACTIVITY = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x1D),
-	HCI_OPCODE_HCI_WRITE_INQUIRY_SCAN_ACTIVITY = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x1E),
-	HCI_OPCODE_HCI_WRITE_AUTHENTICATION_ENABLE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x20),
-	HCI_OPCODE_HCI_WRITE_CLASS_OF_DEVICE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x24),
-	HCI_OPCODE_HCI_WRITE_AUTOMATIC_FLUSH_TIMEOUT = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x28),
-	HCI_OPCODE_HCI_READ_NUM_BROADCAST_RETRANSMISSIONS = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x29),
-	HCI_OPCODE_HCI_WRITE_NUM_BROADCAST_RETRANSMISSIONS = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x2a),
-	HCI_OPCODE_HCI_READ_TRANSMIT_POWER_LEVEL = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x2D),
-	HCI_OPCODE_HCI_WRITE_SYNCHRONOUS_FLOW_CONTROL_ENABLE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x2f),
-	HCI_OPCODE_HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x31),
-	HCI_OPCODE_HCI_HOST_BUFFER_SIZE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x33),
-	HCI_OPCODE_HCI_HOST_NUMBER_OF_COMPLETED_PACKETS = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x35),
-	HCI_OPCODE_HCI_READ_LINK_SUPERVISION_TIMEOUT = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x36),
-	HCI_OPCODE_HCI_WRITE_LINK_SUPERVISION_TIMEOUT = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x37),
-	HCI_OPCODE_HCI_WRITE_CURRENT_IAC_LAP_TWO_IACS = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x3A),
-	HCI_OPCODE_HCI_READ_INQUIRY_SCAN_TYPE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x42),
-	HCI_OPCODE_HCI_WRITE_INQUIRY_SCAN_TYPE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x43),
-	HCI_OPCODE_HCI_READ_INQUIRY_MODE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x44),
-	HCI_OPCODE_HCI_WRITE_INQUIRY_MODE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x45),
-	HCI_OPCODE_HCI_READ_PAGE_SCAN_TYPE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x46),
-	HCI_OPCODE_HCI_WRITE_PAGE_SCAN_TYPE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x47),
-	HCI_OPCODE_HCI_WRITE_EXTENDED_INQUIRY_RESPONSE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x52),
-	HCI_OPCODE_HCI_WRITE_SIMPLE_PAIRING_MODE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x56),
-	HCI_OPCODE_HCI_READ_LOCAL_OOB_DATA = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x57),
-	HCI_OPCODE_HCI_WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x5B),
-	HCI_OPCODE_HCI_SET_EVENT_MASK_2 = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x63),
-	HCI_OPCODE_HCI_READ_LE_HOST_SUPPORTED = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x6c),
-	HCI_OPCODE_HCI_WRITE_LE_HOST_SUPPORTED = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x6d),
-	HCI_OPCODE_HCI_WRITE_SECURE_CONNECTIONS_HOST_SUPPORT = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x7a),
-	HCI_OPCODE_HCI_READ_LOCAL_EXTENDED_OOB_DATA = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x7d),
-	HCI_OPCODE_HCI_READ_EXTENDED_PAGE_TIMEOUT = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x7e),
-	HCI_OPCODE_HCI_WRITE_EXTENDED_PAGE_TIMEOUT = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x7f),
-	HCI_OPCODE_HCI_READ_EXTENDED_INQUIRY_LENGTH = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x80),
-	HCI_OPCODE_HCI_WRITE_EXTENDED_INQUIRY_LENGTH = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x81),
-	HCI_OPCODE_HCI_SET_ECOSYSTEM_BASE_INTERVAL = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x82),
-	HCI_OPCODE_HCI_CONFIGURE_DATA_PATH = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x83),
-	HCI_OPCODE_HCI_SET_MIN_ENCRYPTION_KEY_SIZE = HCI_OPCODE(OGF_CONTROLLER_BASEBAND, 0x84),
-
-	// Testing
-	HCI_OPCODE_HCI_READ_LOOPBACK_MODE = HCI_OPCODE(OGF_TESTING, 0x01),
-	HCI_OPCODE_HCI_WRITE_LOOPBACK_MODE = HCI_OPCODE(OGF_TESTING, 0x02),
-	HCI_OPCODE_HCI_ENABLE_DEVICE_UNDER_TEST_MODE = HCI_OPCODE(OGF_TESTING, 0x03),
-	HCI_OPCODE_HCI_WRITE_SIMPLE_PAIRING_DEBUG_MODE = HCI_OPCODE(OGF_TESTING, 0x04),
-	HCI_OPCODE_HCI_WRITE_SECURE_CONNECTIONS_TEST_MODE = HCI_OPCODE(OGF_TESTING, 0x0a),
-
-	// Information Parameters
-	HCI_OPCODE_HCI_READ_LOCAL_VERSION_INFORMATION = HCI_OPCODE(OGF_INFORMATIONAL_PARAMETERS, 0x01),
-	HCI_OPCODE_HCI_READ_LOCAL_SUPPORTED_COMMANDS = HCI_OPCODE(OGF_INFORMATIONAL_PARAMETERS, 0x02),
-	HCI_OPCODE_HCI_READ_LOCAL_SUPPORTED_FEATURES = HCI_OPCODE(OGF_INFORMATIONAL_PARAMETERS, 0x03),
-	HCI_OPCODE_HCI_READ_BUFFER_SIZE = HCI_OPCODE(OGF_INFORMATIONAL_PARAMETERS, 0x05),
-	HCI_OPCODE_HCI_READ_BD_ADDR = HCI_OPCODE(OGF_INFORMATIONAL_PARAMETERS, 0x09),
-
-	// Status Parameters
-	HCI_OPCODE_HCI_READ_RSSI = HCI_OPCODE(OGF_STATUS_PARAMETERS, 0x05),
-	HCI_OPCODE_HCI_READ_ENCRYPTION_KEY_SIZE = HCI_OPCODE(OGF_STATUS_PARAMETERS, 0x08),
-
-	// LE Controller
-	HCI_OPCODE_HCI_LE_SET_EVENT_MASK = HCI_OPCODE(OGF_LE_CONTROLLER, 0x01),
-	HCI_OPCODE_HCI_LE_READ_BUFFER_SIZE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x02),
-	HCI_OPCODE_HCI_LE_READ_LOCAL_SUPPORTED_FEATURES = HCI_OPCODE(OGF_LE_CONTROLLER, 0x03),
-	HCI_OPCODE_HCI_LE_SET_RANDOM_ADDRESS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x05),
-	HCI_OPCODE_HCI_LE_SET_ADVERTISING_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x06),
-	HCI_OPCODE_HCI_LE_READ_ADVERTISING_CHANNEL_TX_POWER = HCI_OPCODE(OGF_LE_CONTROLLER, 0x07),
-	HCI_OPCODE_HCI_LE_SET_ADVERTISING_DATA = HCI_OPCODE(OGF_LE_CONTROLLER, 0x08),
-	HCI_OPCODE_HCI_LE_SET_SCAN_RESPONSE_DATA = HCI_OPCODE(OGF_LE_CONTROLLER, 0x09),
-	HCI_OPCODE_HCI_LE_SET_ADVERTISE_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x0a),
-	HCI_OPCODE_HCI_LE_SET_SCAN_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x0b),
-	HCI_OPCODE_HCI_LE_SET_SCAN_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x0c),
-	HCI_OPCODE_HCI_LE_CREATE_CONNECTION = HCI_OPCODE(OGF_LE_CONTROLLER, 0x0d),
-	HCI_OPCODE_HCI_LE_CREATE_CONNECTION_CANCEL = HCI_OPCODE(OGF_LE_CONTROLLER, 0x0e),
-	HCI_OPCODE_HCI_LE_READ_WHITE_LIST_SIZE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x0f),
-	HCI_OPCODE_HCI_LE_CLEAR_WHITE_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x10),
-	HCI_OPCODE_HCI_LE_ADD_DEVICE_TO_WHITE_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x11),
-	HCI_OPCODE_HCI_LE_REMOVE_DEVICE_FROM_WHITE_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x12),
-	HCI_OPCODE_HCI_LE_CONNECTION_UPDATE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x13),
-	HCI_OPCODE_HCI_LE_SET_HOST_CHANNEL_CLASSIFICATION = HCI_OPCODE(OGF_LE_CONTROLLER, 0x14),
-	HCI_OPCODE_HCI_LE_READ_CHANNEL_MAP = HCI_OPCODE(OGF_LE_CONTROLLER, 0x15),
-	HCI_OPCODE_HCI_LE_READ_REMOTE_USED_FEATURES = HCI_OPCODE(OGF_LE_CONTROLLER, 0x16),
-	HCI_OPCODE_HCI_LE_ENCRYPT = HCI_OPCODE(OGF_LE_CONTROLLER, 0x17),
-	HCI_OPCODE_HCI_LE_RAND = HCI_OPCODE(OGF_LE_CONTROLLER, 0x18),
-	HCI_OPCODE_HCI_LE_START_ENCRYPTION = HCI_OPCODE(OGF_LE_CONTROLLER, 0x19),
-	HCI_OPCODE_HCI_LE_LONG_TERM_KEY_REQUEST_REPLY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x1a),
-	HCI_OPCODE_HCI_LE_LONG_TERM_KEY_NEGATIVE_REPLY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x1b),
-	HCI_OPCODE_HCI_LE_READ_SUPPORTED_STATES = HCI_OPCODE(OGF_LE_CONTROLLER, 0x1c),
-	HCI_OPCODE_HCI_LE_RECEIVER_TEST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x1d),
-	HCI_OPCODE_HCI_LE_TRANSMITTER_TEST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x1e),
-	HCI_OPCODE_HCI_LE_TEST_END = HCI_OPCODE(OGF_LE_CONTROLLER, 0x1f),
-	HCI_OPCODE_HCI_LE_REMOTE_CONNECTION_PARAMETER_REQUEST_REPLY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x20),
-	HCI_OPCODE_HCI_LE_REMOTE_CONNECTION_PARAMETER_REQUEST_NEGATIVE_REPLY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x21),
-	HCI_OPCODE_HCI_LE_SET_DATA_LENGTH = HCI_OPCODE(OGF_LE_CONTROLLER, 0x22),
-	HCI_OPCODE_HCI_LE_READ_SUGGESTED_DEFAULT_DATA_LENGTH = HCI_OPCODE(OGF_LE_CONTROLLER, 0x23),
-	HCI_OPCODE_HCI_LE_WRITE_SUGGESTED_DEFAULT_DATA_LENGTH = HCI_OPCODE(OGF_LE_CONTROLLER, 0x24),
-	HCI_OPCODE_HCI_LE_READ_LOCAL_P256_PUBLIC_KEY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x25),
-	HCI_OPCODE_HCI_LE_GENERATE_DHKEY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x26),
-	HCI_OPCODE_HCI_LE_ADD_DEVICE_TO_RESOLVING_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x27),
-	HCI_OPCODE_HCI_LE_REMOVE_DEVICE_FROM_RESOLVING_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x28),
-	HCI_OPCODE_HCI_LE_CLEAR_RESOLVING_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x29),
-	HCI_OPCODE_HCI_LE_READ_RESOLVING_LIST_SIZE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x2A),
-	HCI_OPCODE_HCI_LE_READ_PEER_RESOLVABLE_ADDRESS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x2B),
-	HCI_OPCODE_HCI_LE_READ_LOCAL_RESOLVABLE_ADDRESS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x2C),
-	HCI_OPCODE_HCI_LE_SET_ADDRESS_RESOLUTION_ENABLED = HCI_OPCODE(OGF_LE_CONTROLLER, 0x2D),
-	HCI_OPCODE_HCI_LE_SET_RESOLVABLE_PRIVATE_ADDRESS_TIMEOUT = HCI_OPCODE(OGF_LE_CONTROLLER, 0x2E),
-	HCI_OPCODE_HCI_LE_READ_MAXIMUM_DATA_LENGTH = HCI_OPCODE(OGF_LE_CONTROLLER, 0x2F),
-	HCI_OPCODE_HCI_LE_READ_PHY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x30),
-	HCI_OPCODE_HCI_LE_SET_DEFAULT_PHY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x31),
-	HCI_OPCODE_HCI_LE_SET_PHY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x32),
-	HCI_OPCODE_HCI_LE_RECEIVER_TEST_V2 = HCI_OPCODE(OGF_LE_CONTROLLER, 0x33),
-	HCI_OPCODE_HCI_LE_TRANSMITTER_TEST_V2 = HCI_OPCODE(OGF_LE_CONTROLLER, 0x34),
-	HCI_OPCODE_HCI_LE_SET_ADVERTISING_SET_RANDOM_ADDRESS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x35),
-	HCI_OPCODE_HCI_LE_SET_EXTENDED_ADVERTISING_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x36),
-	HCI_OPCODE_HCI_LE_SET_EXTENDED_ADVERTISING_DATA = HCI_OPCODE(OGF_LE_CONTROLLER, 0x37),
-	HCI_OPCODE_HCI_LE_SET_EXTENDED_SCAN_RESPONSE_DATA = HCI_OPCODE(OGF_LE_CONTROLLER, 0x38),
-	HCI_OPCODE_HCI_LE_SET_EXTENDED_ADVERTISING_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x39),
-	HCI_OPCODE_HCI_LE_READ_MAXIMUM_ADVERTISING_DATA_LENGTH = HCI_OPCODE(OGF_LE_CONTROLLER, 0x3a),
-	HCI_OPCODE_HCI_LE_READ_NUMBER_OF_SUPPORTED_ADVERTISING_SETS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x3b),
-	HCI_OPCODE_HCI_LE_REMOVE_ADVERTISING_SET = HCI_OPCODE(OGF_LE_CONTROLLER, 0x3c),
-	HCI_OPCODE_HCI_LE_CLEAR_ADVERTISING_SETS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x3d),
-	HCI_OPCODE_HCI_LE_SET_PERIODIC_ADVERTISING_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x3e),
-	HCI_OPCODE_HCI_LE_SET_PERIODIC_ADVERTISING_DATA = HCI_OPCODE(OGF_LE_CONTROLLER, 0x3f),
-	HCI_OPCODE_HCI_LE_SET_PERIODIC_ADVERTISING_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x40),
-	HCI_OPCODE_HCI_LE_SET_EXTENDED_SCAN_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x41),
-	HCI_OPCODE_HCI_LE_SET_EXTENDED_SCAN_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x42),
-	HCI_OPCODE_HCI_LE_EXTENDED_CREATE_CONNECTION = HCI_OPCODE(OGF_LE_CONTROLLER, 0x43),
-	HCI_OPCODE_HCI_LE_PERIODIC_ADVERTISING_CREATE_SYNC = HCI_OPCODE(OGF_LE_CONTROLLER, 0x44),
-	HCI_OPCODE_HCI_LE_PERIODIC_ADVERTISING_CREATE_SYNC_CANCEL = HCI_OPCODE(OGF_LE_CONTROLLER, 0x45),
-	HCI_OPCODE_HCI_LE_PERIODIC_ADVERTISING_TERMINATE_SYNC = HCI_OPCODE(OGF_LE_CONTROLLER, 0x46),
-	HCI_OPCODE_HCI_LE_ADD_DEVICE_TO_PERIODIC_ADVERTISER_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x47),
-	HCI_OPCODE_HCI_LE_REMOVE_DEVICE_FROM_PERIODIC_ADVERTISER_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x48),
-	HCI_OPCODE_HCI_LE_CLEAR_PERIODIC_ADVERTISER_LIST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x49),
-	HCI_OPCODE_HCI_LE_READ_PERIODIC_ADVERTISER_LIST_SIZE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x4a),
-	HCI_OPCODE_HCI_LE_READ_TRANSMIT_POWER = HCI_OPCODE(OGF_LE_CONTROLLER, 0x4b),
-	HCI_OPCODE_HCI_LE_READ_RF_PATH_COMPENSATION = HCI_OPCODE(OGF_LE_CONTROLLER, 0x4c),
-	HCI_OPCODE_HCI_LE_WRITE_RF_PATH_COMPENSATION = HCI_OPCODE(OGF_LE_CONTROLLER, 0x4d),
-	HCI_OPCODE_HCI_LE_SET_PRIVACY_MODE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x4e),
-	HCI_OPCODE_HCI_LE_RECEIVER_TEST_V3 = HCI_OPCODE(OGF_LE_CONTROLLER, 0x4f),
-	HCI_OPCODE_HCI_LE_TRANSMITTER_TEST_V3 = HCI_OPCODE(OGF_LE_CONTROLLER, 0x50),
-	HCI_OPCODE_HCI_LE_SET_CONNECTIONLESS_CTE_TRANSMIT_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x51),
-	HCI_OPCODE_HCI_LE_SET_CONNECTIONLESS_CTE_TRANSMIT_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x52),
-	HCI_OPCODE_HCI_LE_SET_CONNECTIONLESS_IQ_SAMPLING_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x53),
-	HCI_OPCODE_HCI_LE_SET_CONNECTION_CTE_RECEIVE_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x54),
-	HCI_OPCODE_HCI_LE_SET_CONNECTION_CTE_TRANSMIT_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x55),
-	HCI_OPCODE_HCI_LE_CONNECTION_CTE_REQUEST_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x56),
-	HCI_OPCODE_HCI_LE_CONNECTION_CTE_RESPONSE_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x57),
-	HCI_OPCODE_HCI_LE_READ_ANTENNA_INFORMATION = HCI_OPCODE(OGF_LE_CONTROLLER, 0x58),
-	HCI_OPCODE_HCI_LE_SET_PERIODIC_ADVERTISING_RECEIVE_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x59),
-	HCI_OPCODE_HCI_LE_PERIODIC_ADVERTISING_SYNC_TRANSFER = HCI_OPCODE(OGF_LE_CONTROLLER, 0x5a),
-	HCI_OPCODE_HCI_LE_PERIODIC_ADVERTISING_SET_INFO_TRANSFER = HCI_OPCODE(OGF_LE_CONTROLLER, 0x5b),
-	HCI_OPCODE_HCI_LE_SET_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x5c),
-	HCI_OPCODE_HCI_LE_SET_DEFAULT_PERIODIC_ADVERTISING_SYNC_TRANSFER_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x5d),
-	HCI_OPCODE_HCI_LE_GENERATE_DHKEY_V2 = HCI_OPCODE(OGF_LE_CONTROLLER, 0x5e),
-	HCI_OPCODE_HCI_LE_MODIFY_SLEEP_CLOCK_ACCURACY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x5f),
-	HCI_OPCODE_HCI_LE_READ_BUFFER_SIZE_V2 = HCI_OPCODE(OGF_LE_CONTROLLER, 0x60),
-	HCI_OPCODE_HCI_LE_READ_ISO_TX_SYNC = HCI_OPCODE(OGF_LE_CONTROLLER, 0x61),
-	HCI_OPCODE_HCI_LE_SET_CIG_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x62),
-	HCI_OPCODE_HCI_LE_SET_CIG_PARAMETERS_TEST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x63),
-	HCI_OPCODE_HCI_LE_CREATE_CIS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x64),
-	HCI_OPCODE_HCI_LE_REMOVE_CIG = HCI_OPCODE(OGF_LE_CONTROLLER, 0x65),
-	HCI_OPCODE_HCI_LE_ACCEPT_CIS_REQUEST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x66),
-	HCI_OPCODE_HCI_LE_REJECT_CIS_REQUEST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x67),
-	HCI_OPCODE_HCI_LE_CREATE_BIG = HCI_OPCODE(OGF_LE_CONTROLLER, 0x68),
-	HCI_OPCODE_HCI_LE_CREATE_BIG_TEST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x69),
-	HCI_OPCODE_HCI_LE_TERMINATE_BIG = HCI_OPCODE(OGF_LE_CONTROLLER, 0x6a),
-	HCI_OPCODE_HCI_LE_BIG_CREATE_SYNC = HCI_OPCODE(OGF_LE_CONTROLLER, 0x6b),
-	HCI_OPCODE_HCI_LE_BIG_TERMINATE_SYNC = HCI_OPCODE(OGF_LE_CONTROLLER, 0x6c),
-	HCI_OPCODE_HCI_LE_REQUEST_PEER_SCA = HCI_OPCODE(OGF_LE_CONTROLLER, 0x6d),
-	HCI_OPCODE_HCI_LE_SETUP_ISO_DATA_PATH = HCI_OPCODE(OGF_LE_CONTROLLER, 0x6e),
-	HCI_OPCODE_HCI_LE_REMOVE_ISO_DATA_PATH = HCI_OPCODE(OGF_LE_CONTROLLER, 0x6f),
-	HCI_OPCODE_HCI_LE_ISO_TRANSMIT_TEST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x70),
-	HCI_OPCODE_HCI_LE_ISO_RECEIVE_TEST = HCI_OPCODE(OGF_LE_CONTROLLER, 0x71),
-	HCI_OPCODE_HCI_LE_ISO_READ_TEST_COUNTERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x72),
-	HCI_OPCODE_HCI_LE_ISO_TEST_END = HCI_OPCODE(OGF_LE_CONTROLLER, 0x73),
-	HCI_OPCODE_HCI_LE_SET_HOST_FEATURE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x74),
-	HCI_OPCODE_HCI_LE_READ_ISO_LINK_QUALITY = HCI_OPCODE(OGF_LE_CONTROLLER, 0x75),
-	HCI_OPCODE_HCI_LE_ENHANCED_READ_TRANSMIT_POWER_LEVEL = HCI_OPCODE(OGF_LE_CONTROLLER, 0x76),
-	HCI_OPCODE_HCI_LE_READ_REMOTE_TRANSMIT_POWER_LEVEL = HCI_OPCODE(OGF_LE_CONTROLLER, 0x77),
-	HCI_OPCODE_HCI_LE_SET_PATH_LOSS_REPORTING_PARAMETERS = HCI_OPCODE(OGF_LE_CONTROLLER, 0x78),
-	HCI_OPCODE_HCI_LE_SET_PATH_LOSS_REPORTING_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x79),
-	HCI_OPCODE_HCI_LE_SET_TRANSMIT_POWER_REPORTING_ENABLE = HCI_OPCODE(OGF_LE_CONTROLLER, 0x7a),
-	HCI_OPCODE_HCI_LE_TRANSMITTER_TEST_V4 = HCI_OPCODE(OGF_LE_CONTROLLER, 0x7B),
-
-	HCI_OPCODE_HCI_BCM_WRITE_SCO_PCM_INT = HCI_OPCODE(0x3f, 0x1c),
-	HCI_OPCODE_HCI_BCM_SET_SLEEP_MODE = HCI_OPCODE(0x3f, 0x27),
-	HCI_OPCODE_HCI_BCM_WRITE_I2SPCM_INTERFACE_PARAM = HCI_OPCODE(0x3f, 0x6d),
-	HCI_OPCODE_HCI_BCM_ENABLE_WBS = HCI_OPCODE(0x3f, 0x7e),
-	HCI_OPCODE_HCI_BCM_WRITE_TX_POWER_TABLE = HCI_OPCODE(0x3f, 0x1C9),
-	HCI_OPCODE_HCI_BCM_SET_TX_PWR = HCI_OPCODE(0x3f, 0x1A5),
-	HCI_OPCODE_HCI_TI_VS_CONFIGURE_DDIP = 0xFD55,
-} hci_opcode_t;
-
-void write_pcaprec_hdr_t(std::fstream& file, uint32_t time, uint32_t len, unsigned char* data)
+void write_pcaprec_hdr_t(std::fstream& file, uint32_t time, bool is_sent, hci_packet_type_t packet_type, uint32_t len, unsigned char* data)
 {
+	// official pcap record header
 	pcaprec_hdr_t pcaprec_hdr;
 	reset_pcaprec_hdr_t(pcaprec_hdr);
 
@@ -434,15 +131,16 @@ void write_pcaprec_hdr_t(std::fstream& file, uint32_t time, uint32_t len, unsign
 	pcaprec_hdr.ts_usec = time;
 	pcaprec_hdr.incl_len = len + 4 + 1; // 4 byte direction, 1 byte HCI record type
 	pcaprec_hdr.orig_len = len + 4 + 1; // 4 byte direction, 1 byte HCI record type
-	/*pcaprec_hdr.incl_len = len;
-	pcaprec_hdr.orig_len = len;*/
 
 	file.write(reinterpret_cast<char *>(&pcaprec_hdr.ts_sec), sizeof(pcaprec_hdr.ts_sec));
 	file.write(reinterpret_cast<char *>(&pcaprec_hdr.ts_usec), sizeof(pcaprec_hdr.ts_usec));
 	file.write(reinterpret_cast<char *>(&pcaprec_hdr.incl_len), sizeof(pcaprec_hdr.incl_len));
 	file.write(reinterpret_cast<char *>(&pcaprec_hdr.orig_len), sizeof(pcaprec_hdr.orig_len));
 
-	uint32_t direction = 0x01000000; // 0 - Sent, 1 - Received
+	// this is a direction byte which wireshark requires for dissecting
+	// It is not part of the official pcap file format!
+	// 0 - Sent, 1 - Received
+	uint32_t direction = (is_sent ? 0x00000000 : 0x01000000);
 	file.write(reinterpret_cast<char *>(&direction), sizeof(direction));
 
 	// source: https://software-dl.ti.com/simplelink/esd/simplelink_cc13x2_sdk/1.60.00.29_new/exports/docs/ble5stack/vendor_specific_guide/BLE_Vendor_Specific_HCI_Guide/hci_interface.html
@@ -455,12 +153,13 @@ void write_pcaprec_hdr_t(std::fstream& file, uint32_t time, uint32_t len, unsign
 	//uint8_t prefix = 0x01; // HCI command
 	// ACL - Asynchronous Data	0x02
 	// SCO -	Synchronous Data	0x03
-	uint8_t packet_type = 0x04; // HCI event
+	//uint8_t packet_type = 0x04; // HCI event
 	// Extended Command	0x09
-	file.write(reinterpret_cast<char *>(&packet_type), sizeof(packet_type));
+
+	uint8_t packet_type_as_uint8_t = static_cast<uint8_t>(packet_type);
+	file.write(reinterpret_cast<char *>(&packet_type_as_uint8_t), sizeof(packet_type_as_uint8_t));
 
 	for (int i = 0; i < len; i++)
-	//for (int i = 0; i < len; i++)
 	{
 		uint8_t d = data[i];
 		file.write(reinterpret_cast<char *>(&d), sizeof(d));
@@ -500,7 +199,6 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 
 		for (r = 0; r < interface_descriptor->bNumEndpoints; r++, endpoint++)
 		{
-
 			printf("- endpoint %x, attributes %x\n", endpoint->bEndpointAddress, endpoint->bmAttributes);
 
 			switch (endpoint->bmAttributes & 0x03)
@@ -694,12 +392,21 @@ std::map<uint8_t, std::string> error_code_to_msg = {
 	
 };
 
+uint8_t l2cap_source_cid_lower = 0;
+uint8_t l2cap_source_cid_upper = 0;
+uint8_t l2cap_source_cid = 0;
+
+uint8_t l2cap_command_identifier = 0;
+
 void dump_hci_event(struct libusb_transfer *transfer)
 {
 	printf("dump_hci_event()\n");
 
-	write_pcaprec_hdr_t(file, 1000, transfer->actual_length, transfer->buffer);
+	//bool is_sent = false;
+	//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
 
+	write_packet(file, e_hci_packet_type::hci_event, transfer->buffer, transfer->actual_length);
+	
 	uint8_t idx = 0;
 
 	uint8_t event_code = transfer->buffer[idx++];
@@ -732,9 +439,7 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
 	uint8_t result_code = 0;
 
-	uint8_t l2cap_source_cid_lower = 0;
-	uint8_t l2cap_source_cid_upper = 0;
-	uint8_t l2cap_source_cid = 0;
+	
 
 	uint8_t l2cap_signaling_channel_lower = 0;
 	uint8_t l2cap_signaling_channel_upper = 0;
@@ -773,7 +478,7 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
 	uint16_t connection_handle = 0;
 
-	printf("A\n");
+	//printf("A\n");
 
 	switch (event_code)
 	{
@@ -840,7 +545,7 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
 	case 0x03:
 		printf("CONNECTION COMPLETE event received!\n");
-
+		
 		// 7.7.3 Connection Complete Event - Core_V4.0.pdf - page 718 of 1114
 		// 03 0B 10 0B 00 AB 8A 0F A3 5F 70 01 00
 
@@ -890,11 +595,74 @@ void dump_hci_event(struct libusb_transfer *transfer)
 		encryption_mode_encryption_disabled = transfer->buffer[idx++];
 		printf("Encryption Mode: Encryption Disabled: %02X\n", encryption_mode_encryption_disabled);
 
+
+
+		printf("Send Connection Complete event ...\n");
+
+		for (int i = 0; i < 1024; ++i) {
+			buffer[i] = 0x00;
+		}
+
+		idx = 0;
+
+		// 03 0B 00 0B 00 13 D1 97 08 40 6C 01 00
+
+		// event code: 0x03 == command complete
+		buffer[idx++] = 0x03;
+
+		// total length
+		buffer[idx++] = 0x0B;
+
+		// status: 0x00 == success
+		buffer[idx++] = 0x00;
+
+		// connection handle
+		buffer[idx++] = 0x0B;
+		buffer[idx++] = 0x00;
+
+		/*BT ADDR
+		BT400 : 5C : F3 : 70 : 7D : 0E : 96
+		DE7487M : D0 : C6 : 37 : A1 : 2A : EC
+		MacBook : 6C : 40 : 08 : 97 : D1 : 13
+		RedmiNote : 70 : 5F : A3 : 0F : 8A : AB*/
+
+		//// BT ADDR of communication partner that wants to connect
+		//buffer[idx++] = 0xab;
+		//buffer[idx++] = 0x8a;
+		//buffer[idx++] = 0x0f;
+		//buffer[idx++] = 0xa3;
+		//buffer[idx++] = 0x5f;
+		//buffer[idx++] = 0x70;
+
+		// 5C:F3:70:7D:0E:96
+		// own BT ADDR
+		buffer[idx++] = 0x96;
+		buffer[idx++] = 0x0E;
+		buffer[idx++] = 0x7D;
+		buffer[idx++] = 0x70;
+		buffer[idx++] = 0xF3;
+		buffer[idx++] = 0x5C;
+
+		// link type - link type 0x01 == ACL connection (Data Channels)
+		buffer[idx++] = 0x01;
+
+		// encryption type: 0x00 == encryption disabled
+		buffer[idx++] = 0x00;
+
+		Sleep(wait);
+		usb_send_cmd_packet(buffer, idx);
+
+		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_command, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+		transfer->user_data = NULL;
+		libusb_submit_transfer(transfer);
+
 		break;
 
 		// 0B 20 0A 00 06 00 01 00 0A 02 02 00 02 00
 		// 0B 20 0A 00   aclLength(06 00)   aclChannel(01 00)       0A 02 02 00 02 00
-	case 0x0B:
+	/*case 0x0B:
 		printf("L2CAP - ACL received!\n");
 
 		header_byte_2 = transfer->buffer[idx++];
@@ -941,10 +709,11 @@ void dump_hci_event(struct libusb_transfer *transfer)
 			printf("l2cap_command_code: connection request\n");
 
 			// this does not parse as l2cap packet!
-			//write_pcaprec_hdr_t(file, 1000, transfer->actual_length, transfer->buffer);
-			/*
-			file.flush();
-			file.close();*/
+			//bool is_sent = false;
+			//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+			
+			//file.flush();
+			//file.close();
 
 			l2cap_source_cid_lower = transfer->buffer[idx++];
 			l2cap_source_cid_upper = transfer->buffer[idx++];
@@ -998,14 +767,14 @@ void dump_hci_event(struct libusb_transfer *transfer)
 			// destination CID - our own randomly choosen CID
 			buffer[idx++] = 0x41;
 			buffer[idx++] = 0x00;
-			/*buffer[idx++] = l2cap_source_cid_lower;
-			buffer[idx++] = l2cap_source_cid_upper;*/
-			/*buffer[idx++] = l2cap_source_cid_upper;
-			buffer[idx++] = l2cap_source_cid_lower;*/
+			//buffer[idx++] = l2cap_source_cid_lower;
+			//buffer[idx++] = l2cap_source_cid_upper;
+			//buffer[idx++] = l2cap_source_cid_upper;
+			//buffer[idx++] = l2cap_source_cid_lower;
 
 			// source CID
-			/* buffer[idx++] = 0x40;
-			 buffer[idx++] = 0x00;*/
+			//buffer[idx++] = 0x40;
+			// buffer[idx++] = 0x00;
 			buffer[idx++] = l2cap_source_cid_lower;
 			buffer[idx++] = l2cap_source_cid_upper;
 
@@ -1020,91 +789,101 @@ void dump_hci_event(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			// dump the packet into the .pcap file
+			//bool is_sent = true;
+			write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
 
 			transfer->user_data = NULL;
 			libusb_submit_transfer(transfer);
 
-			//
-			// Configure request
-			//
+			
+			////
+			//// Configure request
+			////
 
-			for (int i = 0; i < 1024; ++i) {
-				buffer[i] = 0x00;
-			}
+			//for (int i = 0; i < 1024; ++i) {
+			//	buffer[i] = 0x00;
+			//}
 
-			idx = 0;
+			//idx = 0;
 
-			// 0b 00  10 00  0c 00  01 00  04  05  08 00  50 00  00 00  01 02  9b 06
+			//// 0b 00  10 00  0c 00  01 00  04  05  08 00  50 00  00 00  01 02  9b 06
 
-			// connection handle
-			//buffer[idx++] = 0x0b;
+			//// connection handle
+			////buffer[idx++] = 0x0b;
+			////buffer[idx++] = 0x00;
+
+			////buffer[idx++] = 0x02;
+
+			//buffer[idx++] = event_code;
+			////buffer[idx++] = header_byte_2;
 			//buffer[idx++] = 0x00;
 
+			//// data total length (2 Byte)
+			//buffer[idx++] = 0x10;
+			//buffer[idx++] = 0x00;
+
+			//// length of lcap packet (2 Byte)
+			//buffer[idx++] = 0x0c;
+			//buffer[idx++] = 0x00;
+
+			//// signaling channel (2 Byte) 0x0001
+			//buffer[idx++] = 0x01;
+			//buffer[idx++] = 0x00;
+
+			//// command code (1 Byte) - connection response (0x03)
+			//buffer[idx++] = 0x04;
+
+			//// command identifier (1 Byte)
+			////buffer[idx++] = 0x04;
+			////buffer[idx++] = 0x01;
+			//buffer[idx++] = (l2cap_command_identifier + 1);
+
+			//// command length (2 byte)
+			//buffer[idx++] = 0x08;
+			//buffer[idx++] = 0x00;
+
+			//// destination CID - our own randomly choosen CID
+			//buffer[idx++] = 0x41;
+			//buffer[idx++] = 0x00;
+			////buffer[idx++] = l2cap_source_cid_lower;
+			////buffer[idx++] = l2cap_source_cid_upper;
+			////buffer[idx++] = l2cap_source_cid_upper;
+			////buffer[idx++] = l2cap_source_cid_lower;
+
+			//// source CID
+			//// buffer[idx++] = 0x40;
+			//// buffer[idx++] = 0x00;
+			//buffer[idx++] = l2cap_source_cid_lower;
+			//buffer[idx++] = l2cap_source_cid_upper;
+
+			//// result success
+			//buffer[idx++] = 0x01;
 			//buffer[idx++] = 0x02;
 
-			buffer[idx++] = event_code;
-			//buffer[idx++] = header_byte_2;
-			buffer[idx++] = 0x00;
+			//// status (0x0000 = no further information available)
+			//buffer[idx++] = 0x9b;
+			//buffer[idx++] = 0x06;
 
-			// data total length (2 Byte)
-			buffer[idx++] = 0x10;
-			buffer[idx++] = 0x00;
+			//Sleep(wait);
+			//usb_send_cmd_packet(buffer, idx);
 
-			// length of lcap packet (2 Byte)
-			buffer[idx++] = 0x0c;
-			buffer[idx++] = 0x00;
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
 
-			// signaling channel (2 Byte) 0x0001
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x00;
-
-			// command code (1 Byte) - connection response (0x03)
-			buffer[idx++] = 0x04;
-
-			// command identifier (1 Byte)
-			//buffer[idx++] = 0x04;
-			//buffer[idx++] = 0x01;
-			buffer[idx++] = (l2cap_command_identifier + 1);
-
-			// command length (2 byte)
-			buffer[idx++] = 0x08;
-			buffer[idx++] = 0x00;
-
-			// destination CID - our own randomly choosen CID
-			buffer[idx++] = 0x41;
-			buffer[idx++] = 0x00;
-			/*buffer[idx++] = l2cap_source_cid_lower;
-			buffer[idx++] = l2cap_source_cid_upper;*/
-			/*buffer[idx++] = l2cap_source_cid_upper;
-			buffer[idx++] = l2cap_source_cid_lower;*/
-
-			// source CID
-			/* buffer[idx++] = 0x40;
-			 buffer[idx++] = 0x00;*/
-			buffer[idx++] = l2cap_source_cid_lower;
-			buffer[idx++] = l2cap_source_cid_upper;
-
-			// result success
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x02;
-
-			// status (0x0000 = no further information available)
-			buffer[idx++] = 0x9b;
-			buffer[idx++] = 0x06;
-
-			Sleep(wait);
-			usb_send_cmd_packet(buffer, idx);
-
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
-
-			transfer->user_data = NULL;
-			libusb_submit_transfer(transfer);
+			//transfer->user_data = NULL;
+			//libusb_submit_transfer(transfer);
+			
 
 			break;
 
 		case 0x04:
+		{
 			printf("l2cap_command_code: configure request\n");
+
+			// this does not parse as l2cap packet!
+			//bool is_sent = false;
+			//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
 
 			// response is
 			// 0b 00 12 00 0e 00 01 00 05 05 0a 00 4b 00 00 00 00 00 01 02 9b 06
@@ -1116,7 +895,7 @@ void dump_hci_event(struct libusb_transfer *transfer)
 				printf("l2cap_command_code: configure request - ???\n");
 			}
 
-			/*
+		
 					  for (int i = 0; i < 1024; ++i) {
 						buffer[i] = 0x00;
 					  }
@@ -1145,20 +924,26 @@ void dump_hci_event(struct libusb_transfer *transfer)
 					  buffer[idx++] = 0x9b;
 					  buffer[idx++] = 0x06;
 
-					  usleep(wait * 1000);
+					  Sleep(wait);
 					  usb_send_cmd_packet(buffer, idx);
 
-					  write_pcaprec_hdr_t(file, 1000, idx, buffer);
+					  // dump the packet into the .pcap file
+					  //bool is_sent = true;
+					  write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
 
 					  transfer->user_data = NULL;
 					  libusb_submit_transfer(transfer);
-			*/
-
+			
+		}
 			break;
 
 		case 0x0A:
 			// L2CAP - information request
 			printf("l2cap_command_code: information request\n");
+
+			// this does not parse as l2cap packet!
+			//bool is_sent = false;
+			//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
 
 			// response
 			// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
@@ -1194,7 +979,8 @@ void dump_hci_event(struct libusb_transfer *transfer)
 				Sleep(wait);
 				usb_send_cmd_packet(buffer, idx);
 
-				//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+				//bool is_sent = false
+				write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
 
 				transfer->user_data = NULL;
 				libusb_submit_transfer(transfer);
@@ -1202,50 +988,59 @@ void dump_hci_event(struct libusb_transfer *transfer)
 			}
 			else if (l2cap_information_type == 0x03) {
 				printf("l2cap_command_code: configure request - ???\n");
+
+				// this does not parse as l2cap packet!
+				//bool is_sent = false;
+				//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
 			}
 
-			/*
-					  for (int i = 0; i < 1024; ++i) {
-						buffer[i] = 0x00;
-					  }
+			//		  for (int i = 0; i < 1024; ++i) {
+			//			buffer[i] = 0x00;
+			//		  }
 
-					  buffer[idx++] = 0x0b;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x14;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x10;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x01;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x0b;
-					  buffer[idx++] = 0x03;
-					  buffer[idx++] = 0x0c;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x03;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x06;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x0b;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x14;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x10;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x01;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x0b;
+			//		  buffer[idx++] = 0x03;
+			//		  buffer[idx++] = 0x0c;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x03;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x06;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x00;
+			//		  buffer[idx++] = 0x00;
 
-					  usleep(wait * 1000);
-					  usb_send_cmd_packet(buffer, idx);
+			//		  usleep(wait * 1000);
+			//		  usb_send_cmd_packet(buffer, idx);
 
-					  write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//		  //bool is_sent = false
+			//		  write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, idx, buffer);
 
-					  transfer->user_data = NULL;
-					  libusb_submit_transfer(transfer);
-			*/
+			//		  transfer->user_data = NULL;
+			//		  libusb_submit_transfer(transfer);
+			
 			break;
 
 		default:
 			printf("l2cap_command_code: UNKNOWN (0x%02x)\n", l2cap_command_code);
+
+			// this does not parse as l2cap packet!
+			//bool is_sent = false;
+			//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+
 			break;
 		}
 
@@ -1254,6 +1049,7 @@ void dump_hci_event(struct libusb_transfer *transfer)
 		// case 0x0C:
 		//   printf("ACL received!\n");
 		//   break;
+		*/
 
 	case 0x04:
 
@@ -1262,7 +1058,8 @@ void dump_hci_event(struct libusb_transfer *transfer)
 		// <<< 04 0A AB 8A 0F A3 5F 70 0C 02 5A 01
 		
 		// this works as expected! It parses as an HCI received event for connection request
-		//write_pcaprec_hdr_t(file, 1000, transfer->actual_length, transfer->buffer);
+		//bool is_sent = false
+		//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, transfer->actual_length, transfer->buffer);
 		//file.flush();
 		//file.close();
 
@@ -1339,7 +1136,8 @@ void dump_hci_event(struct libusb_transfer *transfer)
 		Sleep(wait);
 		usb_send_cmd_packet(buffer, idx);
 
-		//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_command, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 		transfer->user_data = NULL;
 		libusb_submit_transfer(transfer);
@@ -1785,20 +1583,629 @@ void print_transfer_status(struct libusb_transfer *lut)
 	}
 }
 
+static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
+{
+	// always handling an event as we're called when data is ready
+	struct timeval tv;
+	memset(&tv, 0, sizeof(struct timeval));
+	libusb_handle_events_timeout(NULL, &tv);
+
+	printf("\n\n\n");
+
+	printf("**********************************************************\n");
+	printf("async_acl_callback()\n");
+	printf("**********************************************************\n");
+
+	printf("async_acl_callback() - transfer->endpoint: 0x%02X\n", transfer->endpoint);
+
+	transfer_completed++;
+	printf("transfer_completed: %d\n", transfer_completed);
+
+	// dump raw data
+	printf("<<< ");
+	for (int i = 0; i < transfer->actual_length; i++) {
+		fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : " ");
+	}
+	printf("\n");
+
+	// dump the packet into the .pcap file
+//	write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_synchronous_data, transfer->actual_length, transfer->buffer);
+	write_packet(file, e_hci_packet_type::hci_asynchronous_data, transfer->buffer, transfer->actual_length);
+
+	// Incoming "Information request"
+	// 0B 20 0A 00 06 00 01 00 0A 02 02 00 02 00
+
+	// Incoming "Connection request"
+	// 0B 20 0C 00 08 00 01 00 02 03 04 00 01 00 41 00
+
+	uint8_t acl_header_lower = 0;
+	uint8_t acl_header_upper = 0;
+	uint8_t acl_header = 0;
+
+	/*uint8_t l2cap_source_cid_lower = 0;
+	uint8_t l2cap_source_cid_upper = 0;
+	uint8_t l2cap_source_cid = 0;*/
+
+	uint8_t l2cap_signaling_channel_lower = 0;
+	uint8_t l2cap_signaling_channel_upper = 0;
+	uint8_t l2cap_signaling_channel = 0;
+
+	uint8_t l2cap_length_lower = 0;
+	uint8_t l2cap_length_upper = 0;
+	uint8_t l2cap_length = 0;
+
+	uint8_t data_total_length_lower = 0;
+	uint8_t data_total_length_upper = 0;
+	uint8_t data_total_length = 0;
+
+	uint8_t l2cap_command_code = 0;
+
+	
+
+	uint8_t l2cap_command_length_lower = 0;
+	uint8_t l2cap_command_length_upper = 0;
+	uint8_t l2cap_command_length = 0;
+
+	uint8_t l2cap_information_type_lower = 0;
+	uint8_t l2cap_information_type_upper = 0;
+	uint8_t l2cap_information_type = 0;
+
+	uint8_t idx = 0;
+	unsigned char buffer[2048];
+
+	uint8_t event_code = 0;
+	
+	// acl_header
+	acl_header_lower = transfer->buffer[idx++];
+	acl_header_upper = transfer->buffer[idx++];
+	acl_header = (acl_header_upper << 8) + acl_header_lower;
+	printf("acl_header: 0x%04x\n", acl_header);
+
+	/*connection_handle = (header_byte_2 << 8) + event_code;
+	printf("connection_handle: 0x%04x\n", connection_handle);*/
+
+	// data total length
+	data_total_length_lower = transfer->buffer[idx++];
+	data_total_length_upper = transfer->buffer[idx++];
+	data_total_length = (data_total_length_upper << 8) + data_total_length_lower;
+	printf("data_total_length: 0x%04x\n", data_total_length);
+
+	// wrapped l2cap packet length
+	l2cap_length_lower = transfer->buffer[idx++];
+	l2cap_length_upper = transfer->buffer[idx++];
+	l2cap_length = (l2cap_length_upper << 8) + l2cap_length_lower;
+	printf("l2cap_length: 0x%04x\n", l2cap_length);
+
+	l2cap_signaling_channel_lower = transfer->buffer[idx++];
+	l2cap_signaling_channel_upper = transfer->buffer[idx++];
+	l2cap_signaling_channel = (l2cap_signaling_channel_upper << 8) + l2cap_signaling_channel_lower;
+	printf("l2cap_signaling_channel: 0x%04x\n", l2cap_signaling_channel);
+
+	l2cap_command_code = transfer->buffer[idx++];
+	printf("l2cap_command_code: 0x%02x\n", l2cap_command_code);
+
+	l2cap_command_identifier = transfer->buffer[idx++];
+	printf("l2cap_command_identifier: 0x%02x\n", l2cap_command_identifier);
+
+	l2cap_command_length_lower = transfer->buffer[idx++];
+	l2cap_command_length_upper = transfer->buffer[idx++];
+	l2cap_command_length = (l2cap_command_length_upper << 8) + l2cap_command_length_lower;
+	printf("l2cap_command_length: 0x%04x\n", l2cap_command_length);	
+
+	switch (l2cap_command_code) {
+
+	case 0x01:
+		printf("l2cap_command_code: command reject!\n");
+		break;
+
+	case 0x02:
+		printf("l2cap_command_code: connection request\n");
+
+		l2cap_information_type_lower = transfer->buffer[idx++];
+		l2cap_information_type_upper = transfer->buffer[idx++];
+		l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
+		printf("PSM SDP: 0x%04x\n", l2cap_information_type);
+
+		l2cap_source_cid_lower = transfer->buffer[idx++];
+		l2cap_source_cid_upper = transfer->buffer[idx++];
+		l2cap_source_cid = (l2cap_source_cid_upper << 8) + l2cap_source_cid_lower;
+		printf("l2cap_source_cid: 0x%04x\n", l2cap_source_cid);
+
+		// response
+
+		// 02 2a 20 10 00 0c 00 01 00 03 01 08 00 40 00 40 00 00 00 00 00
+
+		for (int i = 0; i < 1024; i++) {
+			buffer[i] = 0x00;
+		}
+
+		idx = 0;
+
+		// ACL header / connection handle
+		buffer[idx++] = 0x0b;
+		buffer[idx++] = 0x00;
+
+		// data total length (2 Byte)
+		buffer[idx++] = 0x10;
+		buffer[idx++] = 0x00;
+
+		// length of l2cap packet (2 Byte)
+		buffer[idx++] = 0x0c;
+		buffer[idx++] = 0x00;
+
+		// signaling channel (2 Byte) 0x0001
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x00;
+
+		// command code (1 Byte) - connection response (0x03)
+		buffer[idx++] = 0x03;
+
+		// command identifier (1 Byte)
+		//buffer[idx++] = 0x04;
+		//buffer[idx++] = 0x01;
+		buffer[idx++] = l2cap_command_identifier;
+
+		// command length (2 byte)
+		buffer[idx++] = 0x08;
+		buffer[idx++] = 0x00;
+
+		// destination CID
+		buffer[idx++] = 0x40;
+		buffer[idx++] = 0x00;
+		//buffer[idx++] = l2cap_source_cid_lower;
+		//buffer[idx++] = l2cap_source_cid_upper;
+		/*buffer[idx++] = l2cap_source_cid_upper;
+		buffer[idx++] = l2cap_source_cid_lower;*/
+
+		// source CID - own source Channel ID (CID)
+		//buffer[idx++] = 0x40;
+		//buffer[idx++] = 0x00;
+		buffer[idx++] = l2cap_source_cid_lower;
+		buffer[idx++] = l2cap_source_cid_upper;
+
+		// result success
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		// status (0x0000 = no further information available)
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		Sleep(wait);
+		usb_send_acl_packet(buffer, idx);
+
+		// dump the packet into the .pcap file
+		//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+		transfer->user_data = NULL;
+		libusb_submit_transfer(transfer);
+		break;
+
+	case 0x04: // Configure request
+		{
+			printf("CONFIGURE REQUEST!\n\n\n");
+
+			// response to configure request MTU
+			// 0b 00 12 00 0e 00 01 00 05 05 0a 00 4d 00 00 00 00 00 01 02 00 04
+
+			// ACL header
+			// 0b 00 - connection handle
+			// 12 00 - data total length
+			
+			// L2CAP protocol
+			// 0e 00 - length
+			// 01 00 - signaling channel
+			
+			// command
+			// 05 - command code (configure response == 0x05)
+			// 05 - command identifier
+			// 0a 00 - command length
+			
+			// 4d 00 - destination channel
+			// 00 00 - reserved + continuation			
+			// 00 00 - success
+			
+			// 01 02 00 04 - option
+
+
+
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			int idx = 0;
+
+			// ACL header
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			// data total length (2 Byte)
+			buffer[idx++] = 0x12;
+			buffer[idx++] = 0x00;
+
+			// length of lcap packet (2 Byte)
+			buffer[idx++] = 0x0e;
+			buffer[idx++] = 0x00;
+
+			// signaling channel (2 Byte) 0x0001
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+
+			// command code (1 Byte) - configure response (0x05)
+			buffer[idx++] = 0x05;
+
+			// command identifier (1 Byte)
+			buffer[idx++] = l2cap_command_identifier;
+
+			// command length (2 byte)
+			buffer[idx++] = 0x0a;
+			buffer[idx++] = 0x00;
+
+			// destination CID 
+			//buffer[idx++] = 0x4d;
+			//buffer[idx++] = 0x00;
+			//buffer[idx++] = l2cap_source_cid_lower;
+			//buffer[idx++] = l2cap_source_cid_upper;
+			//buffer[idx++] = l2cap_source_cid_upper;
+			//buffer[idx++] = l2cap_source_cid_lower;
+
+			// source CID
+			buffer[idx++] = 0x40;
+			buffer[idx++] = 0x00;
+			//buffer[idx++] = l2cap_source_cid_lower;
+			//buffer[idx++] = l2cap_source_cid_upper;
+
+			// reserved + continuation flag
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			// result success
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			// Option
+			buffer[idx++] = 0x01; // option MTU (0x01)
+			buffer[idx++] = 0x02; // length
+
+			// OPTION MTU value (0x0004 == 0x0400 == 1024d)
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x04;
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			// dump the packet into the .pcap file
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_asynchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+			transfer->user_data = NULL;
+			libusb_submit_transfer(transfer);
+		}
+		break;
+
+	case 0x06: // disconnect request
+		{
+			printf("l2cap_command_code: disconnect request\n");
+
+			uint8_t l2cap_destination_cid_lower = transfer->buffer[idx++];
+			uint8_t l2cap_destination_cid_upper = transfer->buffer[idx++];
+			uint8_t l2cap_destination_cid = (l2cap_destination_cid_upper << 8) + l2cap_destination_cid_lower;
+			printf("PSM SDP: 0x%04x\n", l2cap_information_type);
+
+			l2cap_source_cid_lower = transfer->buffer[idx++];
+			l2cap_source_cid_upper = transfer->buffer[idx++];
+			l2cap_source_cid = (l2cap_source_cid_upper << 8) + l2cap_source_cid_lower;
+			printf("l2cap_source_cid: 0x%04x\n", l2cap_source_cid);
+
+			// disconnect response
+			// 0b 00 0c 00 08 00 01 00 07 06 04 00 41 00 4d 00
+
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			int idx = 0;
+
+			// ACL header
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			// data total length (2 Byte)
+			buffer[idx++] = 0x0c;
+			buffer[idx++] = 0x00;
+
+			// length of lcap packet (2 Byte)
+			buffer[idx++] = 0x08;
+			buffer[idx++] = 0x00;
+
+			// signaling channel (2 Byte) 0x0001
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+
+			// command code (1 Byte) - disconnect response (0x07)
+			buffer[idx++] = 0x07;
+
+			// command identifier (1 Byte)
+			buffer[idx++] = l2cap_command_identifier;
+
+			// command length (2 byte)
+			buffer[idx++] = 0x04;
+			buffer[idx++] = 0x00;
+
+			// destination CID 
+			//buffer[idx++] = 0x4d;
+			//buffer[idx++] = 0x00;
+			buffer[idx++] = l2cap_destination_cid_lower;
+			buffer[idx++] = l2cap_destination_cid_upper;
+			//buffer[idx++] = l2cap_source_cid_upper;
+			//buffer[idx++] = l2cap_source_cid_lower;
+
+			// source CID
+			//buffer[idx++] = 0x40;
+			//buffer[idx++] = 0x00;
+			buffer[idx++] = l2cap_source_cid_lower;
+			buffer[idx++] = l2cap_source_cid_upper;
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			// dump the packet into the .pcap file
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_asynchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+			file.flush();
+			file.close();
+
+			transfer->user_data = NULL;
+			libusb_submit_transfer(transfer);
+		}
+		break;
+
+	case 0x0A:
+		// L2CAP - information request
+		printf("l2cap_command_code: information request ...\n");
+
+		// this does not parse as l2cap packet!
+		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+		write_packet(file, e_hci_packet_type::hci_asynchronous_data, transfer->buffer, transfer->actual_length);
+
+		// response
+		// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
+		// 0b 00 10 00 0c 00 01 00 0b 02 08 00 02 00 00 00 80 02 00 00
+
+		// information type
+		l2cap_information_type_lower = transfer->buffer[idx++];
+		l2cap_information_type_upper = transfer->buffer[idx++];
+		l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
+		//printf("PSM SDP: 0x%04x\n", l2cap_information_type);
+		printf("l2cap_information_type: 0x%04x\n", l2cap_information_type);
+
+		if (l2cap_information_type == 0x02) 
+		{
+			printf("l2cap_command_code: configure request - extended features mask\n");
+
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			idx = 0;
+
+			// header
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			// data total length
+			buffer[idx++] = 0x10;
+			buffer[idx++] = 0x00;
+
+			// L2CAP protocol length
+			buffer[idx++] = 0x0c;
+			buffer[idx++] = 0x00;
+
+			// L2CAP signaling channel
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+
+			// command code (0x0b = information respone)
+			buffer[idx++] = 0x0b;
+
+			// command identifier (correlation id between request and response)
+			buffer[idx++] = l2cap_command_identifier;
+
+			// command length
+			buffer[idx++] = 0x08;
+			buffer[idx++] = 0x00;
+
+			// information type: (0x0002 = extended feature mask)
+			buffer[idx++] = 0x02;
+			buffer[idx++] = 0x00;
+
+			// result: (0x0000 = success)
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			// feartures enhRetransmission ??????????????? What!?!
+			buffer[idx++] = 0xa8;
+			buffer[idx++] = 0x02;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+			transfer->user_data = NULL;
+			libusb_submit_transfer(transfer);
+
+		}
+		else if (l2cap_information_type == 0x03)
+		{
+			// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
+
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			idx = 0;
+
+			// header
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			// data total length
+			buffer[idx++] = 0x14;
+			buffer[idx++] = 0x00;
+
+			// L2CAP protocol length
+			buffer[idx++] = 0x10;
+			buffer[idx++] = 0x00;
+
+			// L2CAP signaling channel
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+
+			// command code (0x0b = information respone)
+			buffer[idx++] = 0x0b;
+
+			// command identifier (correlation id between request and response)
+			buffer[idx++] = l2cap_command_identifier;
+
+			// command length
+			buffer[idx++] = 0x0c;
+			buffer[idx++] = 0x00;
+
+			// information type: (0x0003 = fixed channel support)
+			buffer[idx++] = 0x03;
+			buffer[idx++] = 0x00;
+
+			// result: (0x0000 = success)
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			// feartures enhRetransmission ??????????????? What!?!
+			buffer[idx++] = 0x06;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+			transfer->user_data = NULL;
+			libusb_submit_transfer(transfer);
+		}
+		//else if (l2cap_information_type == 0x04) 
+		//{
+		//	printf("l2cap_command_code: configure request\n");
+
+		//	// this does not parse as l2cap packet!
+		//	//bool is_sent = false;
+		//	//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+		//}
+
+		/*
+				  for (int i = 0; i < 1024; i++) {
+					buffer[i] = 0x00;
+				  }
+
+				  idx = 0;
+				  buffer[idx++] = 0x0b;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x14;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x10;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x01;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x0b;
+				  buffer[idx++] = 0x03;
+				  buffer[idx++] = 0x0c;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x03;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x06;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+
+				  usleep(wait * 1000);
+				  usb_send_cmd_packet(buffer, idx);
+
+				  //bool is_sent = false
+				  write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, idx, buffer);
+
+				  transfer->user_data = NULL;
+				  libusb_submit_transfer(transfer);
+		*/
+		break;
+
+	default:
+		printf("l2cap_command_code: UNKNOWN (0x%02x)\n", l2cap_command_code);
+
+		// this does not parse as l2cap packet!
+		//bool is_sent = false;
+		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+
+		break;
+
+	}
+
+	/*if (transfer_completed == 51) {
+		printf("Closing file\n");
+		file.flush();
+		file.close();
+	}*/
+}
+
 static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 //void async_callback(struct libusb_transfer* transfer)
 {
 	printf("\n\n\n");
+
+	printf("async_callback() - transfer->endpoint: 0x%02X\n", transfer->endpoint);
+
+	// always handling an event as we're called when data is ready
+	struct timeval tv;
+	memset(&tv, 0, sizeof(struct timeval));
+	libusb_handle_events_timeout(NULL, &tv);
+
+	//// messages to endpoint 0x00 are only transfer complete messages 21 00 00 which
+	//// are hidden because they add no real information
+	//if (transfer->endpoint == 0x00) 
+	//{
+	//	transfer_completed++;
+	//	printf("transfer_completed: %d\n", transfer_completed);
+
+	//	transfer->user_data = NULL;
+	//	libusb_submit_transfer(transfer);
+
+	//	return;
+	//}
 
 #if 0
 	printf("async_callback() main.c\n");
 	print_transfer_status(transfer);
 #endif
 
-	// always handling an event as we're called when data is ready
-	struct timeval tv;
-	memset(&tv, 0, sizeof(struct timeval));
-	libusb_handle_events_timeout(NULL, &tv);
+	
 
 #if 0
 	int result = libusb_event_handler_active(context);
@@ -1893,7 +2300,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 
 			// it seems to be as if the read local version parameter is not something that 
 			// wireshark can parse!
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			transfer->user_data = NULL;
 			libusb_submit_transfer(transfer);
@@ -1921,7 +2330,10 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -1950,7 +2362,10 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -1979,7 +2394,10 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2009,7 +2427,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2039,7 +2459,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2086,14 +2508,15 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
 			libusb_submit_transfer(transfer);
 		}
 
-		/**/
 		if (transfer_completed == 16)
 		{
 			printf("\n\n\n");
@@ -2119,7 +2542,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2149,7 +2574,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2200,7 +2627,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2240,7 +2669,8 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 				  usleep(wait * 1000);
 				  usb_send_cmd_packet(buffer, idx);
 
-				  write_pcaprec_hdr_t(file, 1000, idx, buffer);
+				bool is_sent = false;
+				write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
 
 				  // without this, the incoming events are not received after all transfers have been used once!
 				  transfer->user_data = NULL;
@@ -2272,7 +2702,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2304,7 +2736,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2339,7 +2773,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2352,6 +2788,8 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 
 			//
 			// HCI command - Send "HCI_Send_Change_Local_Name" command
+			// 7.3.11  Write Local Name Command
+			// BLUETOOTH SPECIFICATION Version 4.0 [Vol 2] page 582 of 1114
 			//
 
 			printf(">>> HCI command - Send \"HCI_Send_Change_Local_Name\" command\n");
@@ -2384,28 +2822,34 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			buffer[idx++] = 0x65; // e
 			buffer[idx++] = 0x72; // r
 			buffer[idx++] = 0x20;
-			buffer[idx++] = 0x35;
-			buffer[idx++] = 0x43;
-			buffer[idx++] = 0x3a;
-			buffer[idx++] = 0x46;
-			buffer[idx++] = 0x33;
-			buffer[idx++] = 0x3a;
+			buffer[idx++] = 0x35; // ASCII '5'
+			buffer[idx++] = 0x43; // ASCII 'C'
+			buffer[idx++] = 0x3a; // ASCII ':'
+			buffer[idx++] = 0x46; // ASCII 'F'
+			buffer[idx++] = 0x33; // ASCII '3'
+			buffer[idx++] = 0x3a; // ASCII ':'
 			buffer[idx++] = 0x37;
 			buffer[idx++] = 0x30;
-			buffer[idx++] = 0x3a;
+			buffer[idx++] = 0x3a; // ASCII ':'
 			buffer[idx++] = 0x37;
 			buffer[idx++] = 0x44;
-			buffer[idx++] = 0x3a;
+			buffer[idx++] = 0x3a; // ASCII ':'
 			buffer[idx++] = 0x30;
 			buffer[idx++] = 0x45;
-			buffer[idx++] = 0x3a;
-			buffer[idx++] = 0x39;
-			buffer[idx++] = 0x36;
+			buffer[idx++] = 0x3a; // ASCII ':'
+			buffer[idx++] = 0x39; // ASCII '9'
+			buffer[idx++] = 0x36; // ASCII '6'
 
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, 251); // 3 byte header - 248 byte data
+			//usb_send_cmd_packet(buffer, 248);
+			//usb_send_cmd_packet(buffer, idx);
+			//usb_send_cmd_packet(buffer, idx+1);
 
-			//write_pcaprec_hdr_t(file, 1000, 251, buffer);
+			// dump the packet into the .pcap file
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2476,7 +2920,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, 244); // 4 byte header - 240 byte data
 
-			//write_pcaprec_hdr_t(file, 1000, 244, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2509,7 +2955,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2542,7 +2990,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2575,7 +3025,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2612,7 +3064,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2624,7 +3078,7 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			//file.flush();
 			//file.close();
 
-			return;
+			//return;
 		}
 
 		/*
@@ -2682,7 +3136,8 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
-			write_pcaprec_hdr_t(file, 1000, idx, buffer);
+			bool is_sent = true;
+			write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
 
 			// without this, the incoming events are not received after all transfers have been used once!
 			transfer->user_data = NULL;
@@ -2690,11 +3145,152 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 		}
 		*/
 
-		if (transfer_completed == 48)
+		/*
+		if (transfer_completed == 46)
 		{
+			// 0b 20 0a 00 06 00 01 00 0a 03 02 00 03 00
+
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			int idx = 0;
+
+			// ACL header
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x20;
+
+			// data total length
+			buffer[idx++] = 0x0a;
+			buffer[idx++] = 0x00;
+
+			// l2cap protocol length
+			buffer[idx++] = 0x06;
+			buffer[idx++] = 0x00;
+
+			// l2cap signaling channel
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+				
+			// command code information request
+			buffer[idx++] = 0x0a;
+			
+			// command identifier
+			buffer[idx++] = 0x09;
+		
+		    // command length
+			buffer[idx++] = 0x02;
+			buffer[idx++] = 0x00;
+				
+			// information type fixed channels
+			buffer[idx++] = 0x03;
+			buffer[idx++] = 0x00;
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			// dump the packet into the .pcap file
+			//bool is_sent = true;
+			write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
+
+			transfer->user_data = NULL;
+			libusb_submit_transfer(transfer);
+
+		}
+		*/
+
+		/**/
+		if (transfer_completed == 54)
+		{
+			// configure request
+
+			//    0b 00 10 00 0c 00 01 00 04 01 08 00 4d 00 00 00 01 02 9b 06
+			// 02 0b 00 10 00 0c 00 01 00 04 06 08 00 4e 00 00 00 01 02 9b 06
+
+
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			int idx = 0;
+
+			buffer[idx++] = 0x02;
+
+			// ACL header
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			// data total length (2 Byte)
+			buffer[idx++] = 0x10;
+			buffer[idx++] = 0x00;
+
+			// length of lcap packet (2 Byte)
+			buffer[idx++] = 0x0c;
+			buffer[idx++] = 0x00;
+
+			// signaling channel (2 Byte) 0x0001
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+
+			// command code (1 Byte) - configure request (0x04)
+			buffer[idx++] = 0x04;
+
+			// command identifier (1 Byte)
+			buffer[idx++] = 0x09;
+
+			// command length (2 byte)
+			buffer[idx++] = 0x08;
+			buffer[idx++] = 0x00;
+
+			// destination CID 
+			//buffer[idx++] = 0x40;
+			//buffer[idx++] = 0x00;
+			buffer[idx++] = l2cap_source_cid_lower;
+			buffer[idx++] = l2cap_source_cid_upper;
+			//buffer[idx++] = l2cap_source_cid_upper;
+			//buffer[idx++] = l2cap_source_cid_lower;
+
+			// source CID
+			// buffer[idx++] = 0x40;
+			// buffer[idx++] = 0x00;
+			//buffer[idx++] = l2cap_source_cid_lower;
+			//buffer[idx++] = l2cap_source_cid_upper;
+
+			// reserved + continuation flag
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			// Option
+			buffer[idx++] = 0x01; // option MTU (0x01)
+			buffer[idx++] = 0x02; // length
+
+			// OPTION MTU value (1691)
+			buffer[idx++] = 0x9b;
+			buffer[idx++] = 0x06;
+
+			/*buffer[idx++] = 0x00;
+			buffer[idx++] = 0x04;*/
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			// dump the packet into the .pcap file
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+			transfer->user_data = NULL;
+			libusb_submit_transfer(transfer);
+		}
+
+		/*if (transfer_completed == 51) {
+			printf("Closing file\n");
 			file.flush();
 			file.close();
-		}
+		}*/
+
+		
 	}
 	else if (transfer->status == LIBUSB_TRANSFER_STALL)
 	{
@@ -2721,6 +3317,130 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 	}
 }
 
+static int usb_send_acl_packet(uint8_t *packet, int size)
+{
+	printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	printf("usb_send_acl_packet() in main.c - libusb_fill_control_setup(), libusb_submit_transfer()\n");
+	printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+
+	printf(">>> [size of message: %d] ", size);
+	for (int i = 0; i < size; ++i)
+	{
+		fprintf(stdout, "%02X%s", packet[i], (i + 1) % 16 == 0 ? "\n" : " ");
+	}
+	printf("\n");
+	
+	// async
+	//libusb_fill_control_setup(hci_cmd_buffer, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 0, 0, 0, size);
+	//memcpy(hci_cmd_buffer + LIBUSB_CONTROL_SETUP_SIZE, packet, size);
+
+	// for (int i = 0; i < (3 + 256 + LIBUSB_CONTROL_SETUP_SIZE); ++i) {
+	//     fprintf(stdout, "%02X%s", hci_cmd_buffer[i], ( i + 1 ) % 16 == 0 ? "\r\n" : " " );
+	// }
+	// printf("\n");
+
+	// prepare transfer
+	int completed = 0;
+	//libusb_fill_control_transfer(acl_out_transfer, handle, hci_cmd_buffer, async_acl_callback, &completed, 0);
+	//libusb_fill_control_transfer(acl_out_transfer, handle, hci_cmd_buffer, async_callback, &completed, 0);
+	libusb_fill_bulk_transfer(acl_out_transfer, handle, acl_out_addr, packet, size, async_callback, &completed, 0);
+	acl_out_transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER;
+
+	// update state before submitting transfer
+	usb_acl_out_active = 1;
+
+	// submit transfer
+	int libusb_submit_transfer_result = libusb_submit_transfer(acl_out_transfer);
+	if (libusb_submit_transfer_result < 0)
+	{
+		usb_acl_out_active = 0;
+
+		printf("\n");
+		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+
+		switch (libusb_submit_transfer_result)
+		{
+		case LIBUSB_SUCCESS:
+			printf("Success(no error)\n");
+			break;
+
+		case LIBUSB_ERROR_IO:
+			printf("Input / output error.\n");
+			break;
+
+		case LIBUSB_ERROR_INVALID_PARAM :
+			printf("Invalid parameter.\n");
+			break;
+
+		case LIBUSB_ERROR_ACCESS :
+			printf("Access denied(insufficient permissions)\n");
+			break;
+
+		case LIBUSB_ERROR_NO_DEVICE :
+			printf("No such device(it may have been disconnected)\n");
+			break;
+
+		case LIBUSB_ERROR_NOT_FOUND :
+			printf("Entity not found.\n");
+			break;
+
+		case LIBUSB_ERROR_BUSY :
+			printf("Resource busy.\n");
+			break;
+
+		case LIBUSB_ERROR_TIMEOUT :
+			printf("Operation timed out.\n");
+			break;
+
+		case LIBUSB_ERROR_OVERFLOW :
+			printf("Overflow.\n");
+			break;
+
+		case LIBUSB_ERROR_PIPE :
+			printf("Pipe error.\n");
+			break;
+
+		case LIBUSB_ERROR_INTERRUPTED :
+			printf("System call interrupted(perhaps due to signal)\n");
+			break;
+
+		case LIBUSB_ERROR_NO_MEM :
+			printf("Insufficient memory.\n");
+			break;
+
+		case LIBUSB_ERROR_NOT_SUPPORTED :
+			printf("Operation not supported or unimplemented on this platform.\n");
+			break;
+
+		case LIBUSB_ERROR_OTHER :
+			printf("Other error.\n");
+			break;
+		}
+
+		print_transfer_status(acl_out_transfer);
+
+		/*int r = libusb_submit_transfer(acl_out_transfer);
+		if (r < 0) {
+			usb_acl_out_active = 0;
+			printf("Error submitting acl transfer, %d", r);
+			return -1;
+		}*/
+
+		return -1;
+	}
+
+#if 0
+	printf("OUT: ");
+	print_transfer_status(command_out_transfer);
+#endif
+
+	return 0;
+}
+
 static int usb_send_cmd_packet(uint8_t *packet, int size)
 {
 	//printf("usb_send_cmd_packet() in main.c - libusb_fill_control_setup(), libusb_submit_transfer()\n");
@@ -2731,8 +3451,6 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
 		fprintf(stdout, "%02X%s", packet[i], (i + 1) % 16 == 0 ? "\n" : " ");
 	}
 	printf("\n");
-
-	int r;
 
 	// async
 	libusb_fill_control_setup(hci_cmd_buffer, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 0, 0, 0, size);
@@ -2764,9 +3482,68 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
 		printf("!!!!!!!!!!!!!!! Error submitting cmd transfer %d\n", libusb_submit_transfer_result);
 		printf("!!!!!!!!!!!!!!! Error submitting cmd transfer %d\n", libusb_submit_transfer_result);
 
+		switch (libusb_submit_transfer_result)
+		{
+		case LIBUSB_SUCCESS:
+			printf("Success(no error)\n");
+			break;
+
+		case LIBUSB_ERROR_IO:
+			printf("Input / output error.\n");
+			break;
+
+		case LIBUSB_ERROR_INVALID_PARAM:
+			printf("Invalid parameter.\n");
+			break;
+
+		case LIBUSB_ERROR_ACCESS:
+			printf("Access denied(insufficient permissions)\n");
+			break;
+
+		case LIBUSB_ERROR_NO_DEVICE:
+			printf("No such device(it may have been disconnected)\n");
+			break;
+
+		case LIBUSB_ERROR_NOT_FOUND:
+			printf("Entity not found.\n");
+			break;
+
+		case LIBUSB_ERROR_BUSY:
+			printf("Resource busy.\n");
+			break;
+
+		case LIBUSB_ERROR_TIMEOUT:
+			printf("Operation timed out.\n");
+			break;
+
+		case LIBUSB_ERROR_OVERFLOW:
+			printf("Overflow.\n");
+			break;
+
+		case LIBUSB_ERROR_PIPE:
+			printf("Pipe error.\n");
+			break;
+
+		case LIBUSB_ERROR_INTERRUPTED:
+			printf("System call interrupted(perhaps due to signal)\n");
+			break;
+
+		case LIBUSB_ERROR_NO_MEM:
+			printf("Insufficient memory.\n");
+			break;
+
+		case LIBUSB_ERROR_NOT_SUPPORTED:
+			printf("Operation not supported or unimplemented on this platform.\n");
+			break;
+
+		case LIBUSB_ERROR_OTHER:
+			printf("Other error.\n");
+			break;
+		}
+
 		print_transfer_status(command_out_transfer);
 
-		libusb_submit_transfer(command_out_transfer);
+		//libusb_submit_transfer(command_out_transfer);
 
 		return -1;
 	}
@@ -2782,7 +3559,8 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
 static uint8_t find_dev(libusb_device **devs)
 {
 	libusb_device *dev;
-	int i = 0, j = 0;
+	int i = 0;
+	int j = 0;
 
 	while ((dev = devs[i++]) != NULL) {
 
@@ -2808,7 +3586,11 @@ static uint8_t find_dev(libusb_device **devs)
 
 			printf("ASUS BT400 found!\n");
 
-			std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
+			//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
+			std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
+
+			std::cout << "Logging to " << filename << std::endl;
+
 			file.open(filename, std::ios::out | std::ios::trunc | std::ios::binary);
 			if (!file.is_open())
 			{
@@ -2817,28 +3599,28 @@ static uint8_t find_dev(libusb_device **devs)
 				return 0;
 			}
 
-			// write copy header
-			pcap_hdr_t pcap_hdr_copy;
-			reset_pcap_hdr_t(pcap_hdr_copy);
+			//// write copy header
+			//pcap_hdr_t pcap_hdr_copy;
+			//reset_pcap_hdr_t(pcap_hdr_copy);
 
-			pcap_hdr_copy.magic_number = 0xa1b2c3d4;
-			pcap_hdr_copy.version_major = 0x02;
-			pcap_hdr_copy.version_minor = 0x04;
-			pcap_hdr_copy.thiszone = 0x00000000;
-			pcap_hdr_copy.sigfigs = 0x00000000;
-			//pcap_hdr_copy.snaplen = 0xFFFF;
-			pcap_hdr_copy.snaplen = 0x00000400;
-			//pcap_hdr_copy.network = 0x00000001;
-			//pcap_hdr_copy.network = 201;
-			pcap_hdr_copy.network = 0x000000C9;
+			//pcap_hdr_copy.magic_number = 0xa1b2c3d4;
+			//pcap_hdr_copy.version_major = 0x02;
+			//pcap_hdr_copy.version_minor = 0x04;
+			//pcap_hdr_copy.thiszone = 0x00000000;
+			//pcap_hdr_copy.sigfigs = 0x00000000;
+			////pcap_hdr_copy.snaplen = 0xFFFF;
+			//pcap_hdr_copy.snaplen = 0x00000400;
+			////pcap_hdr_copy.network = 0x00000001;
+			////pcap_hdr_copy.network = 201;
+			//pcap_hdr_copy.network = 0x000000C9;
 
-			file.write(reinterpret_cast<char *>(&pcap_hdr_copy.magic_number), sizeof(pcap_hdr_copy.magic_number));
-			file.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_major), sizeof(pcap_hdr_copy.version_major));
-			file.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_minor), sizeof(pcap_hdr_copy.version_minor));
-			file.write(reinterpret_cast<char *>(&pcap_hdr_copy.thiszone), sizeof(pcap_hdr_copy.thiszone));
-			file.write(reinterpret_cast<char *>(&pcap_hdr_copy.sigfigs), sizeof(pcap_hdr_copy.sigfigs));
-			file.write(reinterpret_cast<char *>(&pcap_hdr_copy.snaplen), sizeof(pcap_hdr_copy.snaplen));
-			file.write(reinterpret_cast<char *>(&pcap_hdr_copy.network), sizeof(pcap_hdr_copy.network));
+			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.magic_number), sizeof(pcap_hdr_copy.magic_number));
+			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_major), sizeof(pcap_hdr_copy.version_major));
+			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_minor), sizeof(pcap_hdr_copy.version_minor));
+			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.thiszone), sizeof(pcap_hdr_copy.thiszone));
+			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.sigfigs), sizeof(pcap_hdr_copy.sigfigs));
+			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.snaplen), sizeof(pcap_hdr_copy.snaplen));
+			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.network), sizeof(pcap_hdr_copy.network));
 
 			ret = libusb_open(dev, &handle);
 			switch (ret) {
@@ -3056,7 +3838,7 @@ static uint8_t find_dev(libusb_device **devs)
 					handle, 
 					acl_in_addr,
 					hci_acl_in_buffer[c] + HCI_INCOMING_PRE_BUFFER_SIZE, HCI_ACL_BUFFER_SIZE, 
-					async_callback, 
+					async_acl_callback, 
 					user_data,
 					timeout);
 				
@@ -3128,7 +3910,9 @@ static uint8_t find_dev(libusb_device **devs)
 
 			usb_send_cmd_packet(buffer, idx);
 
-			//write_pcaprec_hdr_t(file, 1000, size, packet);
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);	
 
 			Sleep(wait);
 
@@ -3354,6 +4138,88 @@ int main()
     std::cout << "Hello HCI test!" << std::endl;
 
 	/*
+
+	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
+
+	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
+	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
+
+	std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_dump.pklg";
+
+	std::fstream file(filename, std::ios::in | std::ios::binary);
+	if (!file.is_open())
+	{
+		std::cout << "Could not open " << filename << std::endl;
+
+		return 0;
+	}
+
+	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pklg";
+	std::fstream file_copy;
+	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
+	if (!file_copy.is_open())
+	{
+		std::cout << "Could not open " << filename_copy << std::endl;
+
+		return 0;
+	}
+
+	std::cout << std::endl;
+	while (!file.eof())
+	{
+		if (packetlogger_read_packet(file, [&file_copy](packetlogger_header_t& header, uint8_t hci_packet_type, char* data) -> void {
+			
+			// if string type, output a string
+			if (hci_packet_type >= 0xFB) 
+			{
+				std::string s(data, (header.len - 9));
+				std::cout << s << std::endl;
+			}
+
+			// DEBUG dump packet
+			for (int i = 0; i < header.len - 9; i++)
+			{
+				std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data[i] & 0xFF) << " ";
+			}
+			std::cout << std::dec << std::endl << std::endl;
+
+			if (hci_packet_type < 0xFB) 
+			{
+				// header = length + timestamp
+				file_copy.write(reinterpret_cast<char *>(&header.len), sizeof(header.len));
+				file_copy.write(reinterpret_cast<char *>(&header.ts), sizeof(header.ts));
+
+				// hci packet type
+				file_copy.write(reinterpret_cast<char *>(&hci_packet_type), sizeof(hci_packet_type));
+
+				// data
+				for (int i = 0; i < (header.len - 9); i++)
+				{
+					uint8_t d = data[i];
+					file_copy.write(reinterpret_cast<char *>(&d), sizeof(d));
+				}
+			}
+		}))
+		{
+			std::cout << "Not an Apple (Bluetooth) packetlogger file! " << filename << std::endl;
+
+			file.flush();
+			file.close();
+
+			return -1;
+		}
+	}
+
+	file.flush();
+	file.close();
+
+	return 0;
+	*/
+
+	/*file_copy.flush();
+	file_copy.close();*/
+
+	/*
 	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
 
 	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
@@ -3475,9 +4341,22 @@ int main()
 	file.close();
 
 	file_copy.flush();
-	file_copy.close();	
+	file_copy.close();
 	*/
+
 /**/
+	/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
+
+	std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+	if (!temp_file.is_open())
+	{
+		std::cout << "Could not open " << filename << std::endl;
+
+		return 0;
+	}
+
+	file = &temp_file;*/
+
 	std::cout << "libusb_init() ..." << std::endl;
 	int r = libusb_init(&context);
 	if (r < 0)

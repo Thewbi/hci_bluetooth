@@ -1,0 +1,54 @@
+			printf("resetting the device ...\n");
+			printf("sending reset_command_template ...\n");
+			usb_send_cmd_packet<2, 1>(reset_command_template, [](uint8_t* data, uint8_t data_len) -> void {
+				printf("reset_command_template.callback_function\n");						
+			});
+			Sleep(wait);
+
+			printf("sending read_local_version_information_template ...\n");
+			usb_send_cmd_packet<2, 1>(read_local_version_information_template, [](uint8_t* data, uint8_t data_len) -> void {
+				printf("read_local_version_information_template.callback_function\n");						
+			});
+			Sleep(wait);
+			
+			printf("sending read_local_name_template ...\n");
+			usb_send_cmd_packet<2, 1>(read_local_name_template, [](uint8_t* data, uint8_t data_len) -> void {
+				printf("read_local_name_template.callback_function\n");
+			});
+			Sleep(wait);
+
+			printf("sending read_local_supported_commands_template ...\n");
+			usb_send_cmd_packet<2, 1>(read_local_supported_commands_template, [](uint8_t* data, uint8_t data_len) -> void {
+				printf("read_local_supported_commands_template.callback_function\n");
+				Sleep(wait);
+			});
+
+			printf("sending read_bd_addr_template ...\n");
+			usb_send_cmd_packet<2, 1>(read_bd_addr_template, [](uint8_t* data, uint8_t data_len) -> void {
+				printf("read_bd_addr_template.callback_function\n");
+				Sleep(wait);
+			});
+
+			printf("sending read_buffer_size_template ...\n");
+			usb_send_cmd_packet<2, 1>(read_buffer_size_template, [](uint8_t* data, uint8_t data_len) -> void {
+				printf("read_buffer_size_template.callback_function\n");
+				Sleep(wait);
+
+				
+			});
+
+			printf("sending read_local_supported_features_template ...\n");
+			usb_send_cmd_packet<2, 1>(read_local_supported_features_template, [](uint8_t* data, uint8_t data_len) -> void {
+				printf("read_local_supported_features_template.callback_function\n");
+				Sleep(wait);
+
+				
+			});
+
+			printf("sending send_set_event_mask_template ...\n");
+			usb_send_cmd_packet<2, 9>(send_set_event_mask_template, [](uint8_t* data, uint8_t data_len) -> void {
+				printf("send_set_event_mask_template.callback_function\n");
+				Sleep(wait);
+
+
+			});

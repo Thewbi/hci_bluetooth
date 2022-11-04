@@ -133,6 +133,7 @@ void write_packet(std::fstream& file, e_hci_packet_type hci_packet_type, const s
 	file.flush();
 }
 
+// This method dumps packets to a file
 void write_packet(std::fstream& file, e_hci_packet_type hci_packet_type, uint8_t* data, uint8_t data_len)
 {
 	packetlogger_header_t packetlogger_header;

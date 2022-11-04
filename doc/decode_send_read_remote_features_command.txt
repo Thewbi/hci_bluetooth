@@ -1,0 +1,29 @@
+
+
+
+sending read_remote_supported_features ...
+>>> 1B 04 02 0B 00
+
+
+
+
+command_status pending event
+<<< 0F 04 00 01 1B 04
+hci_event_type: command_status (0x0f)
+parameter_total_length: 4
+status: pending 0x00
+number_of_allowed_packets: 4
+opcode that caused this event: 0x1b04
+read_remote_supported_features.callback_function
+
+
+
+
+
+<<< 0B 0B 00 0B 00 BF FE CF FE DB FF 7B 87
+
+0B - event code read remote supported features
+0B - parameter total length
+00 - status: success 0x00
+0B 00 - connection handle
+BF FE CF FE DB FF 7B 87 - feature bit mask

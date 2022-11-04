@@ -336,17 +336,78 @@ typedef enum {
 
 
 // determines what type of event is exchanged between the host and the controller
+// https://software-dl.ti.com/simplelink/esd/simplelink_cc13x2_sdk/1.60.00.29_new/exports/docs/ble5stack/vendor_specific_guide/BLE_Vendor_Specific_HCI_Guide/hci_interface.html
 typedef enum e_hci_event_code
 {
 	connect_complete = 0x03, // event that is not caused by a prior command
 	connect_request = 0x04, // event that is not caused by a prior command
+	disconnection_complete = 0x05, // Disconnection Complete
+	encryption_change = 0x08, // Encryption Change
 	command_complete = 0x0e, // is received as a response to a prior command
+	read_remote_supported_features_complete = 0x0B,
+	read_remote_version_information_complete = 0x0C, // Read Remote Version Information Complete
 	command_status = 0x0f, // event that is not caused by a prior command
+	// Hardware Error (optional)	0x10
 	number_of_completed_packets = 0x13, // event that is not caused by a prior command
 	max_slots_changed = 0x1b, // event that is not caused by a prior command
+	//Data Buffer Overflow	0x1A
+	//Encryption Key Refresh Complete	0x30	
 	link_supervision_timeout_changed = 0x38, // event that is not caused by a prior command
+	//Authenticated Payload Timeout Expired	0x57
 } e_hci_event_code_t;
 
+std::map<uint8_t, std::string> error_code_to_msg = {
+		//{"key1", {0xE2, 0x82, 0xAC}}
+	
+		{0x01, "Unknown HCI Command."},
+		{0x02, "No Connection."},
+		{0x03, "Hardware Failure." },
+		{0x04, "Page Timeout."},
+		{0x05, "Authentication Failure."},
+		{0x06, "Key Missing."},
+		{0x07, "Memory Full."},
+		{0x08, "Connection Timeout."},
+		{0x09, "Max Number Of Connections."},
+		{0x0A, "Max Number Of SCO Connections To A Device."},
+		{0x0B, "ACL connection already exists."},
+		{0x0C, "Command Disallowed."},
+		{0x0D, "Host Rejected due to limited resources."},
+		{0x0E, "Host Rejected due to security reasons."},
+		{0x0F, "Host Rejected due to remote device is only a personal device."},
+		{0x10, "Host Timeout."},
+		{0x11, "Unsupported Feature or Parameter Value."},
+		{0x12, "Invalid HCI Command Parameters."},
+		{0x13, "Other End Terminated Connection : User Ended Connection."},
+		{0x14, "Other End Terminated Connection : Low Resources."},
+		{0x15, "Other End Terminated Connection : About to Power Off."},
+		{0x16, "Connection Terminated by Local Host."},
+		{0x17, "Repeated Attempts."},
+		{0x18, "Pairing Not Allowed."},
+		{0x19, "Unknown LMP PDU."},
+		{0x1A, "Unsupported Remote Feature."},
+		{0x1B, "SCO Offset Rejected."},
+		{0x1C, "SCO Interval Rejected."},
+		{0x1D, "SCO Air Mode Rejected."},
+		{0x1E, "Invalid LMP Parameters."},
+		{0x1F, "Unspecified Error."},
+		{0x20, "Unsupported LMP Parameter Value."},
+		{0x21, "Role Change Not Allowed"},
+		{0x22, "LMP Response Timeout"},
+		{0x23, "LMP Error Transaction Collision"},
+		{0x24, "LMP PDU Not Allowed"},
+		{0x25, "Encryption Mode Not Acceptable"},
+		{0x26, "Unit Key Used"},
+		{0x27, "QoS is Not Supported"},
+		{0x28, "Instant Passed"},
+		{0x29, "Pairing with Unit Key Not Supported"},
+		//0x2A - 0xFF Reserved for Future Use.
+		
+	};
+
+const char* hci_error_name(uint8_t error_id)
+{
+	return error_code_to_msg.at(error_id).c_str();
+}
 
 /*
 https://github.com/nccgroup/BLE-Replay/blob/master/btsnoop/btsnoop/bt/l2cap.py

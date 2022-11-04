@@ -1,0 +1,12 @@
+>>> 03 0C 00
+03 0C - opcode reset
+00 - length
+
+
+<<< 0E 04 01 03 0C 00
+
+0E - hci event type: 0x0e command complete
+04 - length
+01 - number of allowed command packets
+03 0C - opcode that caused this command
+00 - status: success (0x00)

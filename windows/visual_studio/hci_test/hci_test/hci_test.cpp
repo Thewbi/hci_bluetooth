@@ -15,14 +15,15 @@
 #include "pklg.h"
 #include <intrin.h>
 
+bool authentication_request = false;
 
 
 // from btstack/platform/libusb/hci_transport_h2_libusb.c
 
-#define EVENT_IN_BUFFER_COUNT 3
+#define EVENT_IN_BUFFER_COUNT 50
 static struct libusb_transfer *event_in_transfer[EVENT_IN_BUFFER_COUNT];
 
-#define ACL_IN_BUFFER_COUNT 3
+#define ACL_IN_BUFFER_COUNT 50
 static struct libusb_transfer *acl_in_transfer[ACL_IN_BUFFER_COUNT];
 
 // incoming buffer for HCI Events
@@ -343,54 +344,54 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 
 #define LE_Read_Buffer_Size 0x2002
 
-// https://www.btnode.ethz.ch/static_docs/doxygen/btnut/group__Bt__Error__Codes.html
-std::map<uint8_t, std::string> error_code_to_msg = {
-	//{"key1", {0xE2, 0x82, 0xAC}}
-
-	{0x01, "Unknown HCI Command."},
-	{0x02, "No Connection."},
-	{0x03, "Hardware Failure." },
-	{0x04, "Page Timeout."},
-	{0x05, "Authentication Failure."},
-	{0x06, "Key Missing."},
-	{0x07, "Memory Full."},
-	{0x08, "Connection Timeout."},
-	{0x09, "Max Number Of Connections."},
-	{0x0A, "Max Number Of SCO Connections To A Device."},
-	{0x0B, "ACL connection already exists."},
-	{0x0C, "Command Disallowed."},
-	{0x0D, "Host Rejected due to limited resources."},
-	{0x0E, "Host Rejected due to security reasons."},
-	{0x0F, "Host Rejected due to remote device is only a personal device."},
-	{0x10, "Host Timeout."},
-	{0x11, "Unsupported Feature or Parameter Value."},
-	{0x12, "Invalid HCI Command Parameters."},
-	{0x13, "Other End Terminated Connection : User Ended Connection."},
-	{0x14, "Other End Terminated Connection : Low Resources."},
-	{0x15, "Other End Terminated Connection : About to Power Off."},
-	{0x16, "Connection Terminated by Local Host."},
-	{0x17, "Repeated Attempts."},
-	{0x18, "Pairing Not Allowed."},
-	{0x19, "Unknown LMP PDU."},
-	{0x1A, "Unsupported Remote Feature."},
-	{0x1B, "SCO Offset Rejected."},
-	{0x1C, "SCO Interval Rejected."},
-	{0x1D, "SCO Air Mode Rejected."},
-	{0x1E, "Invalid LMP Parameters."},
-	{0x1F, "Unspecified Error."},
-	{0x20, "Unsupported LMP Parameter Value."},
-	{0x21, "Role Change Not Allowed"},
-	{0x22, "LMP Response Timeout"},
-	{0x23, "LMP Error Transaction Collision"},
-	{0x24, "LMP PDU Not Allowed"},
-	{0x25, "Encryption Mode Not Acceptable"},
-	{0x26, "Unit Key Used"},
-	{0x27, "QoS is Not Supported"},
-	{0x28, "Instant Passed"},
-	{0x29, "Pairing with Unit Key Not Supported"},
-	//0x2A - 0xFF Reserved for Future Use.
-	
-};
+//// https://www.btnode.ethz.ch/static_docs/doxygen/btnut/group__Bt__Error__Codes.html
+//std::map<uint8_t, std::string> error_code_to_msg = {
+//	//{"key1", {0xE2, 0x82, 0xAC}}
+//
+//	{0x01, "Unknown HCI Command."},
+//	{0x02, "No Connection."},
+//	{0x03, "Hardware Failure." },
+//	{0x04, "Page Timeout."},
+//	{0x05, "Authentication Failure."},
+//	{0x06, "Key Missing."},
+//	{0x07, "Memory Full."},
+//	{0x08, "Connection Timeout."},
+//	{0x09, "Max Number Of Connections."},
+//	{0x0A, "Max Number Of SCO Connections To A Device."},
+//	{0x0B, "ACL connection already exists."},
+//	{0x0C, "Command Disallowed."},
+//	{0x0D, "Host Rejected due to limited resources."},
+//	{0x0E, "Host Rejected due to security reasons."},
+//	{0x0F, "Host Rejected due to remote device is only a personal device."},
+//	{0x10, "Host Timeout."},
+//	{0x11, "Unsupported Feature or Parameter Value."},
+//	{0x12, "Invalid HCI Command Parameters."},
+//	{0x13, "Other End Terminated Connection : User Ended Connection."},
+//	{0x14, "Other End Terminated Connection : Low Resources."},
+//	{0x15, "Other End Terminated Connection : About to Power Off."},
+//	{0x16, "Connection Terminated by Local Host."},
+//	{0x17, "Repeated Attempts."},
+//	{0x18, "Pairing Not Allowed."},
+//	{0x19, "Unknown LMP PDU."},
+//	{0x1A, "Unsupported Remote Feature."},
+//	{0x1B, "SCO Offset Rejected."},
+//	{0x1C, "SCO Interval Rejected."},
+//	{0x1D, "SCO Air Mode Rejected."},
+//	{0x1E, "Invalid LMP Parameters."},
+//	{0x1F, "Unspecified Error."},
+//	{0x20, "Unsupported LMP Parameter Value."},
+//	{0x21, "Role Change Not Allowed"},
+//	{0x22, "LMP Response Timeout"},
+//	{0x23, "LMP Error Transaction Collision"},
+//	{0x24, "LMP PDU Not Allowed"},
+//	{0x25, "Encryption Mode Not Acceptable"},
+//	{0x26, "Unit Key Used"},
+//	{0x27, "QoS is Not Supported"},
+//	{0x28, "Instant Passed"},
+//	{0x29, "Pairing with Unit Key Not Supported"},
+//	//0x2A - 0xFF Reserved for Future Use.
+//	
+//};
 
 uint8_t l2cap_source_cid_lower = 0;
 uint8_t l2cap_source_cid_upper = 0;
@@ -437,9 +438,7 @@ void dump_hci_event(struct libusb_transfer *transfer)
 	uint8_t event_type = 0;
 	uint8_t address_type = 0;
 
-	uint8_t result_code = 0;
-
-	
+	uint8_t result_code = 0;	
 
 	uint8_t l2cap_signaling_channel_lower = 0;
 	uint8_t l2cap_signaling_channel_upper = 0;
@@ -482,6 +481,94 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
 	switch (event_code)
 	{
+
+	case 0x31:
+	{
+		printf("Rcvd IO capability Request\n");
+
+		unsigned char buffer[1024];
+		for (int i = 0; i < 1024; ++i) {
+			buffer[i] = 0x00;
+		}
+
+		int idx = 0;
+
+		// command opcode
+		buffer[idx++] = 0x2B;
+		buffer[idx++] = 0x04;
+
+		// total length
+		buffer[idx++] = 0x09;
+
+		// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
+		buffer[idx++] = 0xAB;
+		buffer[idx++] = 0x8A;
+		buffer[idx++] = 0x0F;
+		buffer[idx++] = 0xA3;
+		buffer[idx++] = 0x5F;
+		buffer[idx++] = 0x70;
+
+		// IO capability: Display Yes(9x01) / No(0x00)
+		buffer[idx++] = 0x00;
+
+		// OOB Data Present (Not Present 0x00)
+		buffer[idx++] = 0x00;
+
+		// Authentication Requirement: MITM Protection Not Required - General Bonding, Numeric Comparison, Automatic Accept Allowed, No Secure Connection
+		buffer[idx++] = 0x04;
+
+		Sleep(wait);
+		usb_send_cmd_packet(buffer, idx);
+
+		//bool is_sent = true;
+		//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+		// without this, the incoming events are not received after all transfers have been used once!
+		transfer->user_data = NULL;
+		libusb_submit_transfer(transfer);
+	}
+	break;
+
+	case 0x33:
+	{
+		printf("Rcvd User confirmation request\n");
+
+		unsigned char buffer[1024];
+		for (int i = 0; i < 1024; ++i) {
+			buffer[i] = 0x00;
+		}
+
+		int idx = 0;
+
+		// command opcode
+		buffer[idx++] = 0x2c;
+		buffer[idx++] = 0x04;
+
+		// total length
+		buffer[idx++] = 0x06;
+
+		// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
+		buffer[idx++] = 0xAB;
+		buffer[idx++] = 0x8A;
+		buffer[idx++] = 0x0F;
+		buffer[idx++] = 0xA3;
+		buffer[idx++] = 0x5F;
+		buffer[idx++] = 0x70;
+
+		Sleep(wait);
+		usb_send_cmd_packet(buffer, idx);
+
+		//bool is_sent = true;
+		//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+		// without this, the incoming events are not received after all transfers have been used once!
+		transfer->user_data = NULL;
+		libusb_submit_transfer(transfer);
+	}
+	break;
+
 	case 0x3E:
 		printf("LE META\n");
 
@@ -508,6 +595,70 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
 	case HCI_EVENT_TRANSFER_COMPLETE:
 		printf("HCI_EVENT_TRANSFER_COMPLETE\n");
+		break;
+
+	case 0x16:
+		{
+			printf("\n\n\n");
+
+			//
+			// HCI command - Send "PIN Code Request Reply Command" command
+			//
+
+			printf(">>> HCI command - Send \"PIN Code Request Reply Command\" command\n");
+
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; ++i) {
+				buffer[i] = 0x00;
+			}
+
+			int idx = 0;
+
+			// command opcode
+			buffer[idx++] = 0x0D;
+			buffer[idx++] = 0x00;
+
+			// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
+			buffer[idx++] = 0xAB;
+			buffer[idx++] = 0x8A;
+			buffer[idx++] = 0x0F;
+			buffer[idx++] = 0xA3;
+			buffer[idx++] = 0x5F;
+			buffer[idx++] = 0x70;
+
+			// PIN_Code_Length (1 Byte)
+			buffer[idx++] = 0x04;
+
+			// PIN_Code (16 Byte)
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			Sleep(wait);
+			usb_send_cmd_packet(buffer, idx);
+
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+			// without this, the incoming events are not received after all transfers have been used once!
+			transfer->user_data = NULL;
+			libusb_submit_transfer(transfer);
+		}
 		break;
 
 	case 0x0f:
@@ -597,63 +748,63 @@ void dump_hci_event(struct libusb_transfer *transfer)
 
 
 
-		printf("Send Connection Complete event ...\n");
+		//printf("Send Connection Complete event ...\n");
 
-		for (int i = 0; i < 1024; ++i) {
-			buffer[i] = 0x00;
-		}
+		//for (int i = 0; i < 1024; ++i) {
+		//	buffer[i] = 0x00;
+		//}
 
-		idx = 0;
+		//idx = 0;
 
-		// 03 0B 00 0B 00 13 D1 97 08 40 6C 01 00
+		//// 03 0B 00 0B 00 13 D1 97 08 40 6C 01 00
 
-		// event code: 0x03 == command complete
-		buffer[idx++] = 0x03;
+		//// event code: 0x03 == command complete
+		//buffer[idx++] = 0x03;
 
-		// total length
-		buffer[idx++] = 0x0B;
+		//// total length
+		////buffer[idx++] = 0x0B;
 
-		// status: 0x00 == success
-		buffer[idx++] = 0x00;
+		//// status: 0x00 == success
+		//buffer[idx++] = 0x00;
 
-		// connection handle
-		buffer[idx++] = 0x0B;
-		buffer[idx++] = 0x00;
+		//// connection handle
+		//buffer[idx++] = 0x0B;
+		//buffer[idx++] = 0x00;
 
-		/*BT ADDR
-		BT400 : 5C : F3 : 70 : 7D : 0E : 96
-		DE7487M : D0 : C6 : 37 : A1 : 2A : EC
-		MacBook : 6C : 40 : 08 : 97 : D1 : 13
-		RedmiNote : 70 : 5F : A3 : 0F : 8A : AB*/
+		///*BT ADDR
+		//BT400 : 5C : F3 : 70 : 7D : 0E : 96
+		//DE7487M : D0 : C6 : 37 : A1 : 2A : EC
+		//MacBook : 6C : 40 : 08 : 97 : D1 : 13
+		//RedmiNote : 70 : 5F : A3 : 0F : 8A : AB*/
 
-		//// BT ADDR of communication partner that wants to connect
-		//buffer[idx++] = 0xab;
-		//buffer[idx++] = 0x8a;
-		//buffer[idx++] = 0x0f;
-		//buffer[idx++] = 0xa3;
-		//buffer[idx++] = 0x5f;
+		////// BT ADDR of communication partner that wants to connect
+		////buffer[idx++] = 0xab;
+		////buffer[idx++] = 0x8a;
+		////buffer[idx++] = 0x0f;
+		////buffer[idx++] = 0xa3;
+		////buffer[idx++] = 0x5f;
+		////buffer[idx++] = 0x70;
+
+		//// 5C:F3:70:7D:0E:96
+		//// own BT ADDR
+		//buffer[idx++] = 0x96;
+		//buffer[idx++] = 0x0E;
+		//buffer[idx++] = 0x7D;
 		//buffer[idx++] = 0x70;
+		//buffer[idx++] = 0xF3;
+		//buffer[idx++] = 0x5C;
 
-		// 5C:F3:70:7D:0E:96
-		// own BT ADDR
-		buffer[idx++] = 0x96;
-		buffer[idx++] = 0x0E;
-		buffer[idx++] = 0x7D;
-		buffer[idx++] = 0x70;
-		buffer[idx++] = 0xF3;
-		buffer[idx++] = 0x5C;
+		//// link type - link type 0x01 == ACL connection (Data Channels)
+		//buffer[idx++] = 0x01;
 
-		// link type - link type 0x01 == ACL connection (Data Channels)
-		buffer[idx++] = 0x01;
+		//// encryption type: 0x00 == encryption disabled
+		//buffer[idx++] = 0x00;
 
-		// encryption type: 0x00 == encryption disabled
-		buffer[idx++] = 0x00;
+		//Sleep(wait);
+		//usb_send_cmd_packet(buffer, idx);
 
-		Sleep(wait);
-		usb_send_cmd_packet(buffer, idx);
-
-		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_command, idx, buffer);
-		write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+		////write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_command, idx, buffer);
+		//write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 		transfer->user_data = NULL;
 		libusb_submit_transfer(transfer);
@@ -1609,9 +1760,19 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	printf("\n");
 
 	// dump the packet into the .pcap file
-//	write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_synchronous_data, transfer->actual_length, transfer->buffer);
-	write_packet(file, e_hci_packet_type::hci_asynchronous_data, transfer->buffer, transfer->actual_length);
+	if (transfer->endpoint != 0x00)
+	{
+		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_synchronous_data, transfer->actual_length, transfer->buffer);
+		//write_packet(file, e_hci_packet_type::hci_asynchronous_data, transfer->buffer, transfer->actual_length);
+		write_packet(file, e_hci_packet_type::hci_synchronous_data, transfer->buffer, transfer->actual_length);
+	}
 
+	/*if (transfer_completed == 46)
+	{
+		printf("closing log file!\n");
+		file.flush();
+		file.close();
+	}*/
 	// Incoming "Information request"
 	// 0B 20 0A 00 06 00 01 00 0A 02 02 00 02 00
 
@@ -1638,9 +1799,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	uint8_t data_total_length_upper = 0;
 	uint8_t data_total_length = 0;
 
-	uint8_t l2cap_command_code = 0;
-
-	
+	uint8_t l2cap_command_code = 0;	
 
 	uint8_t l2cap_command_length_lower = 0;
 	uint8_t l2cap_command_length_upper = 0;
@@ -1694,11 +1853,65 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 
 	switch (l2cap_command_code) {
 
+	case 0xCC:
+		{
+		if (!authentication_request)
+		{
+			authentication_request = true;
+			printf("Starting simple pairing using HCI_Authentication_Requested !\n");
+
+			printf("\n\n\n");
+
+			//
+			// HCI command - Send "HCI_Write_Inquiry_Mode" command
+			//
+
+			printf(">>> HCI command - Send \"HCI_Write_Inquiry_Mode\" command\n");
+
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; ++i) {
+				buffer[i] = 0x00;
+			}
+
+			// 7.1.15  Authentication Requested Command
+
+			int idx = 0;
+			
+			// opcode 
+			buffer[idx++] = 0x11;
+			//buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			//buffer[idx++] = 0x0b;
+			//buffer[idx++] = 0x11;
+
+			buffer[idx++] = 0x00;
+
+			Sleep(wait);
+			usb_send_cmd_packet(buffer, idx);
+
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+			// without this, the incoming events are not received after all transfers have been used once!
+			transfer->user_data = NULL;
+			libusb_submit_transfer(transfer);
+
+			//libusb_handle_events(context);
+
+			//file.close();
+			//file.flush();
+		}
+		}
+		break;
+
 	case 0x01:
 		printf("l2cap_command_code: command reject!\n");
 		break;
 
 	case 0x02:
+	{
 		printf("l2cap_command_code: connection request\n");
 
 		l2cap_information_type_lower = transfer->buffer[idx++];
@@ -1774,12 +1987,92 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 		Sleep(wait);
 		usb_send_acl_packet(buffer, idx);
 
-		// dump the packet into the .pcap file
+		// dump the outgoing packet into the .pcap file
 		//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
 		write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
 
 		transfer->user_data = NULL;
 		libusb_submit_transfer(transfer);
+
+
+		//
+		// Send configure request for MTU
+		//
+
+		// configure request
+
+		for (int i = 0; i < 1024; i++) {
+			buffer[i] = 0x00;
+		}
+
+		idx = 0;
+
+		// connection handle
+		buffer[idx++] = 0x0b;
+		buffer[idx++] = 0x00;
+
+		// data total length (2 Byte)
+		buffer[idx++] = 0x10;
+		buffer[idx++] = 0x00;
+
+		// length of lcap packet (2 Byte)
+		buffer[idx++] = 0x0c;
+		buffer[idx++] = 0x00;
+
+		// signaling channel (2 Byte) 0x0001
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x00;
+
+		// command code (1 Byte) - configure request (0x04)
+		buffer[idx++] = 0x04;
+
+		// command identifier (1 Byte)
+		buffer[idx++] = static_cast<uint8_t>(l2cap_command_identifier + 1);
+
+		// command length (2 byte)
+		buffer[idx++] = 0x08;
+		buffer[idx++] = 0x00;
+
+		// destination CID 
+		//buffer[idx++] = 0x40;
+		//buffer[idx++] = 0x00;
+		buffer[idx++] = l2cap_source_cid_lower;
+		buffer[idx++] = l2cap_source_cid_upper;
+		//buffer[idx++] = l2cap_source_cid_upper;
+		//buffer[idx++] = l2cap_source_cid_lower;
+
+		// source CID
+		// buffer[idx++] = 0x40;
+		// buffer[idx++] = 0x00;
+		//buffer[idx++] = l2cap_source_cid_lower;
+		//buffer[idx++] = l2cap_source_cid_upper;
+
+		// reserved + continuation flag
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		// Option
+		buffer[idx++] = 0x01; // option MTU (0x01)
+		buffer[idx++] = 0x02; // length
+
+		// OPTION MTU value (1691)
+		/*buffer[idx++] = 0x9b;
+		buffer[idx++] = 0x06;*/
+
+		/**/buffer[idx++] = 0x00;
+		buffer[idx++] = 0x04;
+
+		Sleep(wait);
+		usb_send_acl_packet(buffer, idx);
+
+		// dump the packet into the .pcap file
+		//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+		transfer->user_data = NULL;
+		libusb_submit_transfer(transfer);
+
+	}
 		break;
 
 	case 0x04: // Configure request
@@ -1876,7 +2169,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_acl_packet(buffer, idx);
 
-			// dump the packet into the .pcap file
+			// dump the outgoing packet into the .pcap file
 			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_asynchronous_data, idx, buffer);
 			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
 
@@ -1888,6 +2181,8 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	case 0x06: // disconnect request
 		{
 			printf("l2cap_command_code: disconnect request\n");
+
+			authentication_request = false;
 
 			uint8_t l2cap_destination_cid_lower = transfer->buffer[idx++];
 			uint8_t l2cap_destination_cid_upper = transfer->buffer[idx++];
@@ -1952,10 +2247,11 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_acl_packet(buffer, idx);
 
-			// dump the packet into the .pcap file
+			// dump the outgoing packet into the .pcap file
 			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_asynchronous_data, idx, buffer);
 			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
 
+			// close the file
 			file.flush();
 			file.close();
 
@@ -1967,10 +2263,6 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	case 0x0A:
 		// L2CAP - information request
 		printf("l2cap_command_code: information request ...\n");
-
-		// this does not parse as l2cap packet!
-		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
-		write_packet(file, e_hci_packet_type::hci_asynchronous_data, transfer->buffer, transfer->actual_length);
 
 		// response
 		// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
@@ -1985,7 +2277,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 
 		if (l2cap_information_type == 0x02) 
 		{
-			printf("l2cap_command_code: configure request - extended features mask\n");
+			printf("l2cap_command_code: Send a response to the \"configure request - extended features mask\"\n");
 
 			for (int i = 0; i < 1024; i++) {
 				buffer[i] = 0x00;
@@ -1993,7 +2285,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 
 			idx = 0;
 
-			// header
+			// connection handle
 			buffer[idx++] = 0x0b;
 			buffer[idx++] = 0x00;
 
@@ -2027,8 +2319,9 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 			buffer[idx++] = 0x00;
 			buffer[idx++] = 0x00;
 
-			// feartures enhRetransmission ??????????????? What!?!
-			buffer[idx++] = 0xa8;
+			// features enhRetransmission ??????????????? What!?!
+			//buffer[idx++] = 0xa8;
+			buffer[idx++] = 0x80;
 			buffer[idx++] = 0x02;
 			buffer[idx++] = 0x00;
 			buffer[idx++] = 0x00;
@@ -2036,12 +2329,12 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 			Sleep(wait);
 			usb_send_acl_packet(buffer, idx);
 
+			// write the outgoing packet into the log file
 			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
 			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
 
 			transfer->user_data = NULL;
 			libusb_submit_transfer(transfer);
-
 		}
 		else if (l2cap_information_type == 0x03)
 		{
@@ -2266,7 +2559,10 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 	  // printf("ACL Request received!\n");
 	  // break;
 
-		dump_hci_event(transfer);
+		if (transfer->endpoint != 0x00)
+		{
+			dump_hci_event(transfer);
+		}
 
 		transfer_completed++;
 
@@ -3200,7 +3496,7 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 		}
 		*/
 
-		/**/
+		/* Send MTU configuration request
 		if (transfer_completed == 54)
 		{
 			// configure request
@@ -3270,8 +3566,8 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			buffer[idx++] = 0x9b;
 			buffer[idx++] = 0x06;
 
-			/*buffer[idx++] = 0x00;
-			buffer[idx++] = 0x04;*/
+			//buffer[idx++] = 0x00;
+			//buffer[idx++] = 0x04;
 
 			Sleep(wait);
 			usb_send_acl_packet(buffer, idx);
@@ -3282,9 +3578,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 
 			transfer->user_data = NULL;
 			libusb_submit_transfer(transfer);
-		}
+		}*/
 
-		/*if (transfer_completed == 51) {
+		/*if (transfer_completed == 57) {
 			printf("Closing file\n");
 			file.flush();
 			file.close();
@@ -3343,7 +3639,7 @@ static int usb_send_acl_packet(uint8_t *packet, int size)
 	int completed = 0;
 	//libusb_fill_control_transfer(acl_out_transfer, handle, hci_cmd_buffer, async_acl_callback, &completed, 0);
 	//libusb_fill_control_transfer(acl_out_transfer, handle, hci_cmd_buffer, async_callback, &completed, 0);
-	libusb_fill_bulk_transfer(acl_out_transfer, handle, acl_out_addr, packet, size, async_callback, &completed, 0);
+	libusb_fill_bulk_transfer(acl_out_transfer, handle, acl_out_addr, packet, size, async_acl_callback, &completed, 0);
 	acl_out_transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER;
 
 	// update state before submitting transfer
@@ -3578,9 +3874,7 @@ static uint8_t find_dev(libusb_device **devs)
 		}
 
 		printf("get [%04X:%04X] device string descriptor \n", desc.idVendor, desc.idProduct);
-		printf("iProduct[%d]: ", desc.iProduct);
-
-		
+		printf("iProduct[%d]: ", desc.iProduct);	
 
 		if (desc.idVendor == 0x0b05 && desc.idProduct == 0x17cb) {
 
@@ -4346,15 +4640,12 @@ int main()
 
 /**/
 	/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
-
 	std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
 	if (!temp_file.is_open())
 	{
 		std::cout << "Could not open " << filename << std::endl;
-
 		return 0;
 	}
-
 	file = &temp_file;*/
 
 	std::cout << "libusb_init() ..." << std::endl;

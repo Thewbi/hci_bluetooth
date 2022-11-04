@@ -61,6 +61,10 @@
 //template<size_t OPCODE_LEN, size_t PAYLOAD_LEN>
 //static int usb_send_cmd_packet(command_template<OPCODE_LEN, PAYLOAD_LEN>& templ, std::function<void(uint8_t* data, uint8_t data_len, struct libusb_transfer* transfer)> callback);
 //
+//template<size_t OPCODE_LEN, size_t PAYLOAD_LEN>
+//static int usb_send_acl_packet(command_template<OPCODE_LEN, PAYLOAD_LEN>& templ, std::function<void(uint8_t* data, uint8_t data_len, struct libusb_transfer* transfer)> callback);
+//
+//
 ///*
 // * https://github.com/JohnOrlando/uhd_with_burx/blob/master/host/lib/transport/libusb1_zero_copy.cpp
 // *
@@ -172,17 +176,324 @@
 //	}
 //	printf("\n");
 //
-//	uint16_t opcode = (static_cast<uint8_t>(transfer->buffer[3]) << 8U) + static_cast<uint8_t>(transfer->buffer[4]);
+//	// decode event
+//	uint8_t event_type = transfer->buffer[0];
+//
+//	uint16_t opcode = 0x0000;
+//
+//	switch (event_type) {
+//
+//		// 0x03
+//		case e_hci_event_code::connect_complete:
+//		{
+//			printf("hci_event_type: connect_complete (0x03)\n");
+//
+//			uint8_t parameter_total_length = transfer->buffer[1];
+//			uint8_t status = transfer->buffer[2];
+//			uint16_t connection_handle = (static_cast<uint8_t>(transfer->buffer[3]) << 8U) + static_cast<uint8_t>(transfer->buffer[4]);
+//			// BD-ADDR
+//			uint8_t link_type = transfer->buffer[11];
+//			uint8_t encryption_type = transfer->buffer[12];
+//
+//			printf("parameter_total_length: %d\n", parameter_total_length);
+//			switch (status)
+//			{
+//			case 0x00:
+//				printf("status: success 0x%02x\n", status);
+//				break;
+//
+//			default:
+//				//printf("status: unknown????? 0x%02x\n", status);
+//				printf("status error: \"%s\"\n", hci_error_name(status));
+//				break;
+//			}
+//			printf("BD_ADDR of communication partner this client is about to connect to: ");
+//			for (int i = (3 + 5); i >= 3; --i) {
+//				if (i != 3 + 5)
+//				{
+//					printf(":");
+//				}
+//				fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
+//			}
+//			printf("\n");
+//			printf("connection_handle: 0x%04x\n", connection_handle);
+//			printf("link_type: 0x%02x - ", link_type);
+//			switch (link_type)
+//			{
+//			case 0x01:
+//				printf("ACL connection (Data Channels), packet oriented, asynchronous");
+//				break;
+//
+//			default:
+//				printf("unknown");
+//				break;
+//			}
+//			printf("\n");
+//			printf("encryption_type: 0x%02x - ", encryption_type);
+//			switch (encryption_type)
+//			{
+//			case 0x00:
+//				printf("Encryption Disabled");
+//				break;
+//
+//			default:
+//				printf("unknown");
+//				break;
+//			}
+//
+//			// send next command
+//			if (0x00 == status)
+//			{
+//				Sleep(1000);
+//
+//				//// TODO: this command has a hard-coded connection_handle of 0x0b00!
+//				//// make the payload dynamic!!
+//				//printf("\n\n\nsending read_remote_supported_features ...\n");
+//				//usb_send_cmd_packet<2, 3>(read_remote_supported_features_template, [](uint8_t* data, uint8_t data_len, struct libusb_transfer* transfer) -> void {
+//				//	printf("read_remote_supported_features.callback_function\n");
+//				//	
+//				//	libusb_submit_transfer(transfer);
+//				//	Sleep(wait);
+//				//});
+//
+//				printf("\n\n\nSending connection Request for SDP ...\n");
+//
+//				command_template<2, 0x0E> tt({ 0xB0, 0x20 }, {
+//
+//					// total parameter length ( 2 byte)
+//					0x0C, 0x00,
+//
+//					// l2cap length (2 byte)
+//					0x08, 0x00,
+//
+//					// l2cap signaling channel (2 byte)
+//					0x01, 0x00,
+//
+//					// command code (0x02 == connection request) (1 byte)
+//					0x02,
+//
+//					// command identifier (1 byte)
+//					0x04,
+//
+//					// command length (2 byte)
+//					0x04, 0x00,
+//
+//					// Protocol/Service Multiplexer (PSM) - 0x0100 == SDP
+//					0x01, 0x00,
+//
+//					// Source CID - allocated channel 0x4400
+//					0x44, 0x00
+//					});
+//
+//				usb_send_acl_packet<2, 0x0E>(tt, [](uint8_t* data, uint8_t data_len, struct libusb_transfer* transfer) -> void {
+//					printf("Sending connection Request for SDP .callback_function\n");
+//					libusb_submit_transfer(transfer);
+//					Sleep(wait);
+//				});
+//			}
+//		}
+//		break;
+//
+//		// 0x05
+//		case e_hci_event_code::disconnection_complete:
+//		{
+//			printf("hci_event_type: disconnection_complete (0x05)\n");
+//
+//			uint8_t parameter_total_length = transfer->buffer[1];
+//			uint8_t status = transfer->buffer[2];
+//			uint16_t connection_handle = (static_cast<uint8_t>(transfer->buffer[3]) << 8U) + static_cast<uint8_t>(transfer->buffer[4]);
+//			uint8_t reason = transfer->buffer[5];
+//
+//			printf("parameter_total_length: %d\n", parameter_total_length);
+//			switch (status)
+//			{
+//			case 0x00:
+//				printf("status: success 0x%02x\n", status);
+//				break;
+//
+//			default:
+//				printf("status: unknown????? 0x%02x\n", status);
+//				break;
+//			}
+//			printf("connection_handle: 0x%04x\n", connection_handle);			
+//			printf("reason for disconnect: \"%s\"\n", hci_error_name(reason));
+//		}
+//		break;
+//
+//		// 0x0b
+//		case read_remote_supported_features_complete:
+//		{
+//			printf("hci_event_type: read_remote_supported_features_complete (0x0b)\n");
+//
+//			uint8_t parameter_total_length = transfer->buffer[1];
+//			uint8_t status = transfer->buffer[2];
+//			uint16_t connection_handle = (static_cast<uint8_t>(transfer->buffer[3]) << 8U) + static_cast<uint8_t>(transfer->buffer[4]);
+//
+//			printf("parameter_total_length: %d\n", parameter_total_length);
+//			switch (status)
+//			{
+//			case 0x00:
+//				printf("status: success 0x%02x\n", status);
+//				break;
+//
+//			default:
+//				printf("status: unknown????? 0x%02x\n", status);
+//				break;
+//			}
+//			printf("connection_handle: 0x%04x\n", connection_handle);
+//
+//			// DEBUG dump raw data
+//			printf("feature bitmask: ");
+//			for (int i = 5; i < (5+8); i++) {
+//				fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : " ");
+//			}
+//			printf("\n");
+//
+//			// send next command
+//			if (0x00 == status)
+//			{
+//				/*printf("\n\n\nsending write_simple_pairing_mode ...\n");
+//				usb_send_cmd_packet<2, 2>(write_simple_pairing_mode_template, [](uint8_t* data, uint8_t data_len, struct libusb_transfer* transfer) -> void {
+//					printf("write_simple_pairing_mode_template.callback_function\n");
+//					libusb_submit_transfer(transfer);
+//					Sleep(wait);
+//				});*/
+//
+//				//printf("\n\n\nSending connection Request for SDP ...\n");
+//
+//				//command_template<2, 0x0E> tt({0xB0, 0x20}, { 
+//
+//				//	// total parameter length ( 2 byte)
+//				//	0x0C, 0x00,
+//
+//				//	// l2cap length (2 byte)
+//				//	0x08, 0x00,
+//
+//				//	// l2cap signaling channel (2 byte)
+//				//	0x01, 0x00,
+//
+//				//	// command code (0x02 == connection request) (1 byte)
+//				//	0x02,
+//
+//				//	// command identifier (1 byte)
+//				//	0x04,
+//
+//				//	// command length (2 byte)
+//				//	0x04, 0x00,
+//
+//				//	// Protocol/Service Multiplexer (PSM) - 0x0100 == SDP
+//				//	0x01, 0x00,
+//
+//				//	// Source CID - allocated channel 0x4400
+//				//	0x44, 0x00
+//				//	});
+//
+//				//usb_send_cmd_packet<2, 0x0E>(tt, [](uint8_t* data, uint8_t data_len, struct libusb_transfer* transfer) -> void {
+//				//	printf("Sending connection Request for SDP .callback_function\n");
+//				//	libusb_submit_transfer(transfer);
+//				//	Sleep(wait);
+//				//});
+//			}
+//		}
+//		break;
+//
+//		// 0x0e
+//		case e_hci_event_code::command_complete:
+//		{
+//			printf("hci_event_type: command_complete (0x0e)\n");
+//
+//			uint8_t parameter_total_length = transfer->buffer[1];
+//			uint8_t number_of_allowed_packets = transfer->buffer[2];
+//			opcode = (static_cast<uint8_t>(transfer->buffer[3]) << 8U) + static_cast<uint8_t>(transfer->buffer[4]);
+//			uint8_t status = transfer->buffer[5];
+//
+//			printf("parameter_total_length: %d\n", parameter_total_length);
+//			printf("number_of_allowed_packets: %d\n", number_of_allowed_packets);
+//			switch (status)
+//			{
+//			case 0x00:
+//				printf("status: success 0x%02x\n", status);
+//				break;
+//
+//			default:
+//				//printf("status: unknown????? 0x%02x\n", status);
+//				printf("status error: \"%s\"\n", hci_error_name(status));
+//				break;
+//			}
+//			printf("opcode that caused this event: 0x%04x\n", opcode);
+//		}
+//		break;
+//
+//		// command_status 0x0F
+//		case e_hci_event_code::command_status:
+//		{
+//			printf("hci_event_type: command_status (0x0f)\n");
+//
+//			uint8_t parameter_total_length = transfer->buffer[1];
+//			uint8_t status = transfer->buffer[2];
+//			uint8_t number_of_allowed_packets = transfer->buffer[3];
+//			opcode = (static_cast<uint8_t>(transfer->buffer[4]) << 8U) + static_cast<uint8_t>(transfer->buffer[5]);
+//
+//			printf("parameter_total_length: %d\n", parameter_total_length);
+//			switch (status)
+//			{
+//			case 0x00:
+//				printf("status: currently pending 0x%02x\n", status);
+//				break;
+//
+//			default:
+//				printf("status: command failed 0x%02x - %s\n", status, hci_error_name(status));
+//				break;
+//			}
+//			printf("number_of_allowed_packets: %d\n", parameter_total_length);
+//			printf("opcode that caused this event: 0x%04x\n", opcode);
+//		}
+//		break;
+//
+//		// 0x13
+//		case e_hci_event_code::number_of_completed_packets:
+//		{
+//			printf("hci_event_type: number_of_completed_packets (0x13)\n");
+//
+//			uint8_t parameter_total_length = transfer->buffer[1];
+//			uint8_t number_of_connection_handles = transfer->buffer[2];
+//			uint16_t connection_handle = (static_cast<uint8_t>(transfer->buffer[3]) << 8U) + static_cast<uint8_t>(transfer->buffer[4]);
+//			uint8_t number_of_completed_packets = (static_cast<uint8_t>(transfer->buffer[5]) << 8U) + static_cast<uint8_t>(transfer->buffer[6]);
+//
+//			printf("parameter_total_length: %d\n", parameter_total_length);
+//			printf("number_of_connection_handles: %d\n", number_of_connection_handles);
+//			printf("connection_handle: 0x%04x\n", connection_handle);
+//			printf("number_of_completed_packets: 0x%04x\n", number_of_completed_packets);
+//		}
+//		break;
+//
+//		// 0x1b
+//		case e_hci_event_code::max_slots_changed:
+//		{
+//			printf("hci_event_type: max_slots_changed (0x1b)\n");
+//
+//			uint8_t parameter_total_length = transfer->buffer[1];
+//			uint16_t connection_handle = (static_cast<uint8_t>(transfer->buffer[2]) << 8U) + static_cast<uint8_t>(transfer->buffer[3]);
+//			uint8_t maximum_number_of_slots = transfer->buffer[4];
+//			
+//			printf("parameter_total_length: %d\n", parameter_total_length);
+//			printf("connection_handle: 0x%04x\n", connection_handle);
+//			printf("maximum_number_of_slots: %d\n", maximum_number_of_slots);
+//		}
+//		break;
+//
+//		default:
+//		{
+//			printf("Unknown event: event code: 0x%02x\n", event_type);
+//		}
+//		break;
+//	}
+//	
 //	switch (opcode)
 //	{
 //		case 0x00:
-//			// the event 0x21 0x00 0x00 has no callback
-//			break;
-//
-//		//case 0x030C:
-//		//	printf("Reset\n");
-//		//	//reset_command_template.callback_function(transfer->buffer, transfer->actual_length);
-//		//	break;
+//		// the event 0x21 0x00 0x00 has no callback
+//		break;
 //
 //		default:
 //		{
@@ -191,7 +502,7 @@
 //			{
 //				callback_map[opcode](transfer->buffer, transfer->actual_length, transfer);
 //			}
-//			else 
+//			else
 //			{
 //				printf("Received event for which now callback was registered!\n");
 //				printf("The event is:\n");
@@ -761,9 +1072,12 @@
 //
 //	// submit transfer
 //	int libusb_submit_transfer_result = 1;
-//	while(libusb_submit_transfer_result) {
+//	while (libusb_submit_transfer_result) 
+//	{
 //		printf("libusb_submit_transfer() ...\n");
+//
 //		Sleep(wait);
+//
 //		libusb_submit_transfer_result = libusb_submit_transfer(command_out_transfer);
 //		if (libusb_submit_transfer_result < 0)
 //		{
@@ -857,8 +1171,140 @@
 //	return 0;
 //}
 //
+//template<size_t OPCODE_LEN, size_t PAYLOAD_LEN>
+//static int usb_send_acl_packet(command_template<OPCODE_LEN, PAYLOAD_LEN>& templ, std::function<void(uint8_t* data, uint8_t data_len, struct libusb_transfer* transfer)> callback)
+//{
+//	printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+//	printf("usb_send_acl_packet() in main.c - libusb_fill_control_setup(), libusb_submit_transfer()\n");
+//	printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+//
+//	/*printf(">>> [size of message: %d] ", size);
+//	for (int i = 0; i < size; ++i)
+//	{
+//		fprintf(stdout, "%02X%s", packet[i], (i + 1) % 16 == 0 ? "\n" : " ");
+//	}
+//	printf("\n");*/
+//
+//	// async
+//	//libusb_fill_control_setup(hci_cmd_buffer, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 0, 0, 0, size);
+//	//memcpy(hci_cmd_buffer + LIBUSB_CONTROL_SETUP_SIZE, packet, size);
+//
+//	// for (int i = 0; i < (3 + 256 + LIBUSB_CONTROL_SETUP_SIZE); ++i) {
+//	//     fprintf(stdout, "%02X%s", hci_cmd_buffer[i], ( i + 1 ) % 16 == 0 ? "\r\n" : " " );
+//	// }
+//	// printf("\n");
+//
+//	// outgoing buffer for HCI Command packets
+//	static uint8_t acl_packet_buffer[3 + 256 + LIBUSB_CONTROL_SETUP_SIZE];
+//
+//	// this will first add a USB specific part to the buffer and after the USB specific part
+//	// it will add the HCI packet
+//	libusb_fill_control_setup(acl_packet_buffer, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 0, 0, 0, (OPCODE_LEN + PAYLOAD_LEN));
+//	std::copy(std::begin(templ.opcode), std::end(templ.opcode), std::begin(acl_packet_buffer) + LIBUSB_CONTROL_SETUP_SIZE);
+//	std::copy(std::begin(templ.payload), std::end(templ.payload), std::begin(acl_packet_buffer) + LIBUSB_CONTROL_SETUP_SIZE + OPCODE_LEN);
+//
+//	// prepare transfer
+//	int completed = 0;
+//	//libusb_fill_control_transfer(acl_out_transfer, handle, hci_cmd_buffer, async_acl_callback, &completed, 0);
+//	//libusb_fill_control_transfer(acl_out_transfer, handle, hci_cmd_buffer, async_callback, &completed, 0);
+//	libusb_fill_bulk_transfer(acl_out_transfer, handle, acl_out_addr, acl_packet_buffer, (OPCODE_LEN + PAYLOAD_LEN), async_acl_callback, &completed, 0);
+//	acl_out_transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER;
+//
+//	// update state before submitting transfer
+//	usb_acl_out_active = 1;
+//
+//	// submit transfer
+//	int libusb_submit_transfer_result = libusb_submit_transfer(acl_out_transfer);
+//	if (libusb_submit_transfer_result < 0)
+//	{
+//		usb_acl_out_active = 0;
+//
+//		printf("\n");
+//		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+//		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+//		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+//		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+//		printf("!!!!!!!!!!!!!!! Error submitting acl transfer %d\n", libusb_submit_transfer_result);
+//
+//		printf("%s\n", libusb_error_name(libusb_submit_transfer_result));
+//
+//		/*switch (libusb_submit_transfer_result)
+//		{
+//		case LIBUSB_SUCCESS:
+//			printf("Success(no error)\n");
+//			break;
+//
+//		case LIBUSB_ERROR_IO:
+//			printf("Input / output error.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_INVALID_PARAM:
+//			printf("Invalid parameter.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_ACCESS:
+//			printf("Access denied(insufficient permissions)\n");
+//			break;
+//
+//		case LIBUSB_ERROR_NO_DEVICE:
+//			printf("No such device(it may have been disconnected)\n");
+//			break;
+//
+//		case LIBUSB_ERROR_NOT_FOUND:
+//			printf("Entity not found.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_BUSY:
+//			printf("Resource busy.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_TIMEOUT:
+//			printf("Operation timed out.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_OVERFLOW:
+//			printf("Overflow.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_PIPE:
+//			printf("Pipe error.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_INTERRUPTED:
+//			printf("System call interrupted(perhaps due to signal)\n");
+//			break;
+//
+//		case LIBUSB_ERROR_NO_MEM:
+//			printf("Insufficient memory.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_NOT_SUPPORTED:
+//			printf("Operation not supported or unimplemented on this platform.\n");
+//			break;
+//
+//		case LIBUSB_ERROR_OTHER:
+//			printf("Other error.\n");
+//			break;
+//		}*/
+//
+//		//print_transfer_status(acl_out_transfer);
+//
+//		/*int r = libusb_submit_transfer(acl_out_transfer);
+//		if (r < 0) {
+//			usb_acl_out_active = 0;
+//			printf("Error submitting acl transfer, %d", r);
+//			return -1;
+//		}*/
+//
+//		return -1;
+//	}
+//
+//	return 0;
+//}
+//
 //int main()
 //{
+//	/*
 //	std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_client.pklg";
 //	std::fstream file;
 //	file.open(filename, std::ios::out | std::ios::trunc | std::ios::binary);
@@ -1072,31 +1518,31 @@
 //	//write_packet(file, e_hci_packet_type::hci_event, resp_simple_pairing_mode, 6);
 //
 //	
+//	
+//	//uint8_t data1[] = { 0x0B, 0x20, 0x0A, 0x00, 0x06,
+//	//	0x00, 0x01, 0x00, 0x0A, 0x03, 
+//	//	0x02, 0x00, 0x03, 0x00 };
+//	//write_packet(file, e_hci_packet_type::hci_asynchronous_data, data1, 14);
 //
-//	/*uint8_t data1[] = { 0x0B, 0x20, 0x0A, 0x00, 0x06,
-//		0x00, 0x01, 0x00, 0x0A, 0x03, 
-//		0x02, 0x00, 0x03, 0x00 };
-//	write_packet(file, e_hci_packet_type::hci_asynchronous_data, data1, 14);
+//	//uint8_t data2[] = { 0x0B, 0x00, 0x14, 0x00, 0x10, 
+//	//	0x00, 0x01, 0x00, 0x0B, 0x03, 
+//	//	0x0C, 0x00, 0x03, 0x00, 0x00, 
+//	//	0x00, 0x06, 0x00, 0x00, 0x00, 
+//	//	0x00, 0x00, 0x00, 0x00 };
+//	//write_packet(file, e_hci_packet_type::hci_asynchronous_data, data2, 24);
 //
-//	uint8_t data2[] = { 0x0B, 0x00, 0x14, 0x00, 0x10, 
-//		0x00, 0x01, 0x00, 0x0B, 0x03, 
-//		0x0C, 0x00, 0x03, 0x00, 0x00, 
-//		0x00, 0x06, 0x00, 0x00, 0x00, 
-//		0x00, 0x00, 0x00, 0x00 };
-//	write_packet(file, e_hci_packet_type::hci_asynchronous_data, data2, 24);
+//	//uint8_t data3[] = { 0x0B, 0x20, 0x10, 0x00, 0x0C, 
+//	//	0x00, 0x01, 0x00, 0x04, 0x05, 
+//	//	0x08, 0x00, 0x40, 0x00, 0x00, 
+//	//	0x00, 0x01, 0x02, 0x00, 0x04 };
+//	//write_packet(file, e_hci_packet_type::hci_asynchronous_data, data3, 20);
 //
-//	uint8_t data3[] = { 0x0B, 0x20, 0x10, 0x00, 0x0C, 
-//		0x00, 0x01, 0x00, 0x04, 0x05, 
-//		0x08, 0x00, 0x40, 0x00, 0x00, 
-//		0x00, 0x01, 0x02, 0x00, 0x04 };
-//	write_packet(file, e_hci_packet_type::hci_asynchronous_data, data3, 20);
-//
-//	uint8_t data4[] = { 0x0B, 0x00, 0x12, 0x00, 0x0E, 
-//		0x00, 0x01, 0x00, 0x05, 0x05, 
-//		0x0A, 0x00, 0x40, 0x00, 0x00, 
-//		0x00, 0x00, 0x00, 0x01, 0x02, 
-//		0x00, 0x04 };
-//	write_packet(file, e_hci_packet_type::hci_asynchronous_data, data4, 22);*/
+//	//uint8_t data4[] = { 0x0B, 0x00, 0x12, 0x00, 0x0E, 
+//	//	0x00, 0x01, 0x00, 0x05, 0x05, 
+//	//	0x0A, 0x00, 0x40, 0x00, 0x00, 
+//	//	0x00, 0x00, 0x00, 0x01, 0x02, 
+//	//	0x00, 0x04 };
+//	//write_packet(file, e_hci_packet_type::hci_asynchronous_data, data4, 22);
 //
 //	// l2cap connect request
 //	uint8_t data5[] = { 0x0B, 0x20, 0x0C, 0x00, 0x08, 
@@ -1115,6 +1561,7 @@
 //	file.close();
 //
 //	std::cout << "spp_client!" << std::endl;
+//	*/
 //
 //	std::cout << "libusb_init() ..." << std::endl;
 //	int result = libusb_init(&context);
@@ -1138,11 +1585,12 @@
 //	}
 //	std::cout << "libusb_get_device_list() done." << std::endl;
 //
+//	// if the ASUS BT 400 USB dongle is detected, it will start a Bluetooth client
 //	find_dev(devs);
 //
 //	// https://libusb.sourceforge.io/api-1.0/group__libusb__poll.html
 //	while (1) {
-//		printf("libusb_handle_events() ...\n");
+//		//printf("libusb_handle_events() ...\n");
 //		libusb_handle_events(context);
 //	}
 //

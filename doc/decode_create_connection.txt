@@ -5,6 +5,8 @@ Create_Connection
 HCI Command
 com21@115200
 
+>>> 05 04 0D 32 87 A4 70 F3 5C 18 CC 01 00 00 00 00
+
 [05 04 0D ]: 35 92 02 5B 02 00 18 CC 01 00 00 00 00
 opcode = 0x0405 (1029, "Create_Connection")
 BD_ADDR = "00025B029235"
@@ -40,16 +42,30 @@ Response:
 
 == Connect complete (Event) ==
 
-03 0B 00 0B 00 13 D1 97 08 40 6C 01 00
+<<< 03 0B 00 0B 00 13 D1 97 08 40 6C 01 00
  
-03 - event code: 0x03 == command complete
+03 - event code: 0x03 == ???
 0B - total length
 00 - status: 0x00 == success
 0B 00 - Connection Handle (2 byte) 0x000b
-13 D1 97 08 40 6C - BD ADDR of communication partner
+13 D1 97 08 40 6C - BD ADDR of communication partner the client is about to get connected with
 01 - link type 0x01 == ACL connection (Data Channels)
 00 - encryption type: 0x00 == encryption disabled
 
 
+== Server  or HCI layer?????? informs the client: Max Slot changed ==
+>>> 1B 03 0B 00 05
 
-1B 03 0B 00 05
+1B - event type 0x1B = max slots change notification
+03 - parameter total length
+0B 00 - connection handle (2 byte) 0x000b <- the slot change occured for this handle
+05 - new maximum number of slots
+
+== Incoming event: disconnect_complete ==
+>>> 05 04 00 0B 00 13
+
+05 - event type 0x05 = disconnect complete
+04 - parameter total length 
+00 - status 0x00 == disconnect has occured
+0B 00  - connection handle (2 byte) 0x000b <- the slot change occured for this handle
+13 - reason: one of the error codes

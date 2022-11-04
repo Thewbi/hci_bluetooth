@@ -1,0 +1,16 @@
+read_local_version_information
+
+>>> 01 10 00
+
+<<< 0E 0C 01 01 10 00 06 00 10 06 0F 00 0E 22
+
+0E - hci event type: 0x0e command complete 
+0C - length 
+01 - number of allowed command packets 
+01 10 - opcode that caused this event 
+00 - status: success (0x00) 
+06 - HCI version: 0x06 == 4.0
+00 10 - HCI revision: 0x1000 == 4096 
+06 - LMP version: 0x06 == 4.0
+0F 00 - manufacturer name: broadcom 0x000f
+0E 22 - LMP subversion 8718

@@ -38,6 +38,20 @@ command_template<2, 0x06> inquiry_template(HCI_OPCODE_TO_ARRAY(hci_opcode_t::HCI
 // 00 - Page_Scan_Mode
 // 00 00 - Clock_Offset
 // 00 - Allow_Role_Switch
-command_template<2, 0x0E> create_connection_template(HCI_OPCODE_TO_ARRAY(hci_opcode_t::HCI_OPCODE_HCI_CREATE_CONNECTION), { 0x0D, 0x13, 0xD1, 0x97, 0x08, 0x40, 0x6C, 0x18, 0xCC, 0x01, 0x00, 0x00, 0x00, 0x00 });
+command_template<2, 0x0E> create_connection_template(HCI_OPCODE_TO_ARRAY(hci_opcode_t::HCI_OPCODE_HCI_CREATE_CONNECTION), { 
+	0x0D, 
+	//0x13, 0xD1, 0x97, 0x08, 0x40, 0x6C, // ASUS BT-400 in Windows Laptop
+	0x32, 0x87, 0xA4, 0x70, 0xF3, 0x5C, // ASUS BT-400 in Mac Laptop
+	0x18, 0xCC, 
+	0x01, 
+	0x00, 
+	0x00, 0x00, 
+	0x00 });
+
+// TODO: this command has a hard-coded connection_handle of 0x0b00!
+// make the payload dynamic!!
+command_template<2, 3> read_remote_supported_features_template(HCI_OPCODE_TO_ARRAY(hci_opcode_t::HCI_OPCODE_HCI_READ_REMOTE_SUPPORTED_FEATURES_COMMAND), { 0x02, 0x0b, 0x00 });
+
+command_template<2, 2> write_simple_pairing_mode_template(HCI_OPCODE_TO_ARRAY(hci_opcode_t::HCI_OPCODE_HCI_WRITE_SIMPLE_PAIRING_MODE), { 0x01, 0x01 });
 
 std::map<uint16_t, std::function<void(uint8_t* data, uint8_t data_len, struct libusb_transfer* transfer)>> callback_map;

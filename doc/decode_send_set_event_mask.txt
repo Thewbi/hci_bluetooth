@@ -1,4 +1,4 @@
-0E 04 01 01 0C 00
+<<< 0E 04 01 01 0C 00
 
 0E - event code: command complete
 04 - parameter total length

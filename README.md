@@ -13,7 +13,7 @@ It leverages the HCI layer to talk to a bluetooth dongle using libusb.
 This means you can turn off your operating systems bluetooth functionality (Mac and Windows allow you to turn on or turn off bluetooth)
 and let the user space stack connect to the USB bluetooth dongle.
 
-As a Dongle, this stack currently only was tested with the ASUS BT-400 USB bluetooth dongle.
+As a Dongle, this stack currently only was tested with the ASUS USB-BT400 USB bluetooth dongle.
 
 The stack will then listen for bluetooth connections and act as a RFCOMM server.
 
@@ -23,10 +23,14 @@ HCI is the Host Controller Interface. In this interface, there are two parties t
 The controller is the part that is closer to the hardware. The host is closer to the user space application.
 
 When plugging in a USB bluetooth dongle, the dongle takes over the role of the controller.
-The application that talks to the USB dongle using libusb takes over the role of the host.
+The user space stack that talks to the USB dongle using libusb takes over the role of the host.
 
 The controller manages the hardware. When it gets HCI commands from the host, it will execute them and for example
-reset or configure the hardware. The hardware takes care of the RF side (Sending and receiving data over Radio Frequency Signals)
+reset or configure the hardware. HCI also contains not only commands but also events that can arrive asynchronously.
+Events are used to signal that a command has been executed or that a connection request arrived amongst other things.
+
+The hardware takes care of the RF side (Sending and receiving data over Radio Frequency Signals). 
+It contains the RF hardware and implements the Link Layer (LL) and the Physical Layer (PHY) with its Baseband Radio. 
 
 The host implements the Host part of the HCI and from there talks to the SPP, L2CAP, SDP, RFCOMM and other layers of the 
 bluetooth stack as specified in the bluetooth core specification. On top of that bluetooth stack, there is an application that
@@ -45,17 +49,18 @@ It will get HCI connection requests and either accept or deny them.
 
 Once a HCI connection is established, that HCI connection can be used by a client to send a L2CAP connection.
 L2CAP is a true utilitary transport protocol. It acts as the base transmission layer to run other higher-level protocols over.
-The L2CAP protocol is a protocol that performs packet segmentation and reassembly should the minimal transmission (MTU) unit per exceeded.
-L2CAP also adds the connecpt of channels to the bluetooth stack. There is initially always the control channel with the channel id (CID) 0x0001.
+The L2CAP protocol is a protocol that performs packet segmentation and reassembly should the minimal transmission (MTU) unit be exceeded.
+L2CAP also adds the concept of channels to the bluetooth stack. There is initially always the control channel with the channel id (CID) 0x0001.
 The control channel can be used to establish connections on new channels.
-L2CAP also provides a feature for running several different protocols over channels.
-
-## Service Discovery Protocol (SDP)
+L2CAP also provides a feature for running several different protocols over channels. Having several channels that can each run a different
+protocol allows a client to multiplex several data flows over one bluetooth connection at the same time. This is referred to as multiplexing.
 
 To run a specific protocol, the client asks for a connection on a new channel and in the connection request, it specifies the protocol
 to run in a L2CAP field called Protocol Service Multiplexer (PSM). 
 
-Inside that field, the value 0x0001 for example selects the Service Discovery Protocol (SDP).
+## Service Discovery Protocol (SDP)
+
+Inside the L2CAP Protocol Service Multiplexer (PSM) field, the value 0x0001 for example selects the Service Discovery Protocol (SDP).
 The Service Discovery Protocol defines messages that allow a client to ask a sever for the services that the server provides.
 The client can then select one of those services and connect to the service.
 
@@ -114,6 +119,10 @@ Attribute 0x0100: type STRING (4), element len 13 len 11 (0x0b)
 ```
 
 ## RFCOMM
+
+RFCOMM is one of the services that a bluetooth classic stack can provide.
+The stack first has to enter a SDP record into the SDP system so that the record can
+be returned when a client queries the existing services.
 
 If the SDP returns the existence of an RFCOMM server or the client just decides to connect to a RFCOMM server,
 then a bluetooth based equivalent of socket connection is possible to exchange data (byte arrays).

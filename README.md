@@ -128,3 +128,111 @@ If the SDP returns the existence of an RFCOMM server or the client just decides 
 then a bluetooth based equivalent of socket connection is possible to exchange data (byte arrays).
 
 RFCOMM runs on to of L2CAP.
+
+
+
+
+# Logging with WireShark
+
+The purpose of logging is to output the most low level byte array send and received and also 
+decode the messages so that it is possible to discover what is going on and find errors in the
+protocol implementations and the sequences of requests and responses.
+
+The hard part of logging in a bluetooth stack at the HCI level from the host persepective
+is that we can never see the data that the controller truly receives from the communication partner
+since what really happens is this:
+
+Imagine you want to debug a flow from a bluetooth stack on one user space stack on machine A to a 
+user space bluetooth stack on machine B. The flow starts at machine A in the host. You can log that
+packet on machine A and lookt at it in wireshark. That packet is not the packet that arrives at
+the host on machine B since it first goes into the controller on machine A then from the controller
+over the air to the controller on machine B! From the controller on machine B it is again transformed
+into a HCI event that finally is received by the host on machine B. Again you can log that packet
+on machine B but this is not the packet that machine A has sent!
+
+Logging is a true mess in bluetooth development. It is hard to debug what is going on!
+The way to log is to decode the outgoing and incoming HCI commands and events and write them to 
+a regulary binary file on your PC. If you write the data in .cap or .pklg format, you can then
+open the traces in Wireshark (The best tool ever!).
+Wireshark will decode the byte arrays and you can then start to hunt for errors.
+This is also a good way to learn how other bluetooth stacks work and which messages they send.
+
+Explain the formats of the .cap format and the MacOS .pklg.
+
+
+
+# libusb
+
+Talking to a HCI device is possible over UART and other transmission links.
+The type if transmission used by this bluetooth user space stack is USB.
+To get a plattform neutral implementation of USB, libusb is used. 
+It works on MacOS, Linux and Windows.
+
+libusb is used in an asynchronous fashion since HCI events can occur at any point in time.
+In asynchronous libusb, USB transfers are prepared once and added into a pool of transfers from
+which they are leased, used, reaped and returned.
+
+For me, this never worked! I was not able to return transfers so that they could be reaped and
+reused!
+
+This is something that I still have to learn. For now, transfers are allocated and never returned!
+This is a serious implementation flaw and is one of the major points to fix!
+
+There currently are two constants:
+
+```
+#define EVENT_IN_BUFFER_COUNT 100
+static struct libusb_transfer *event_in_transfer[EVENT_IN_BUFFER_COUNT];
+
+#define ACL_IN_BUFFER_COUNT 100
+static struct libusb_transfer *acl_in_transfer[ACL_IN_BUFFER_COUNT];
+```
+
+Should your stack stop sending or receiving data without any clear indication of why it stops to work,
+increase the numbers to get more transfers!
+
+I know this is terrible but beginners usually write terrible software.
+You have to start somewhere. The main point is to strive to get a better programmer and learn 
+from your mistakes along the way. So lets make mistakes and then correct them!
+
+Also another libusb error is "Resource busy". This happened because I was not able to reuse the one
+outgoing transfer! For outgoing traffic, there is a single transfer defined in the original implementation.
+Once that transfer has been used for the first time, since it is not returned properly, it is still 
+busy and when using it again, the "Resource busy" error occurs.
+
+To work around this issue, a new outgoing transfer is allocated each time a message is sent.
+This allocated transfer is not returned currently. Again, I know this is terrible. I have to fix this issue.
+
+
+
+
+# Establishing L2CAP connections
+
+L2CAP connections when a client sends a L2CAP connection request over a HCI connection which has succesfully 
+been established earlier.
+
+0b200c00080001000201040001004000
+
+The server will answer the L2CAP connection reques with a L2CAP connection response.
+
+0b2010000c000100030108004100400000000000
+
+The connection is not established yet! The connection goes into phase 2 - configuration.
+In the configuration phase, the client has to send at least one configuration message to the server and
+the server also has to send at least one configuration reques to the client.
+It the server does not send at least one configuration reques to the client or the client does not 
+send at least one configuration request to the server, then the connection will time out and it will
+be dropped by the client!
+
+The simplest way to get out of the configuration phase seems to be to send a configuration request for
+the Maximum Transmission Unit (MTU). If both the server and the client send the configuration request
+for the MTU and they both accept the other side's request, then the connection will be established.
+
+The MTU is used by the L2CAP layer for messages fragemntation and reassembly. If you have limited resource
+say only 100 byte of transmission memory, then setting the MTU to a value of at most 100 will take care
+of the resource limit. L2CAP's responsibility is it to partition larger messages into parts so that each
+part is smaller than the MTU. L2CAP will transmit the parts until the entire messages was transmitted.
+On the receiver side, L2CAP will reassemble the message and hand over the entire message to the upper 
+layers of the stack. To the upper layers it will look like as if a huge packet has been transferred
+over the lower layers although the lowers are only capable of dealing with fractions of messages
+one at a time.

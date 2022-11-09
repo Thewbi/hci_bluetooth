@@ -17,6 +17,7 @@
 
 bool authentication_request = false;
 bool mtu_config_request_received = false;
+uint8_t mtu_config_request_command_identifier = 0x00;
 bool mtu_config_request_sent = false;
 
 
@@ -1225,7 +1226,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 
 	case 0x04:
 
-		printf("CONNECTION REQUEST received!\n");
+		printf("HCI CONNECTION REQUEST received!\n");
 
 		// <<< 04 0A AB 8A 0F A3 5F 70 0C 02 5A 01
 		
@@ -2104,6 +2105,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 			printf("CONFIGURE REQUEST! 0x04 \n\n\n");
 
 			mtu_config_request_received = true;
+			mtu_config_request_command_identifier = l2cap_command_identifier;
 
 			// response to configure request MTU
 			// 0b 00 12 00 0e 00 01 00 05 05 0a 00 4d 00 00 00 00 00 01 02 00 04
@@ -2134,15 +2136,6 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 
 			//int idx = 0;
 			idx = 0;
-
-
-
-			
-
-
-
-
-
 
 			// Send configure response
 
@@ -3642,8 +3635,6 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 		//if (transfer_completed == 51)
 		if (mtu_config_request_received)
 		{
-			mtu_config_request_received = false;
-
 			//
 			// Send configure request for MTU
 			//
@@ -3730,6 +3721,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			submit(transfer);
 
 			mtu_config_request_sent = true;
+
+			// reset
+			mtu_config_request_received = false;
 
 			// exit the function
 			return;
@@ -3839,7 +3833,7 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			buffer[idx++] = 0x05;
 
 			// command identifier (1 Byte)
-			buffer[idx++] = 0x02;
+			buffer[idx++] = mtu_config_request_command_identifier;
 
 			// command length (2 byte)
 			buffer[idx++] = 0x0a;
@@ -3854,10 +3848,10 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			//buffer[idx++] = l2cap_source_cid_lower;
 
 			// source CID
-			buffer[idx++] = 0x40;
-			buffer[idx++] = 0x00;
-			//buffer[idx++] = l2cap_source_cid_lower;
-			//buffer[idx++] = l2cap_source_cid_upper;
+			//buffer[idx++] = 0x41;
+			//buffer[idx++] = 0x00;
+			buffer[idx++] = l2cap_source_cid_lower;
+			buffer[idx++] = l2cap_source_cid_upper;
 
 			// reserved + continuation flag
 			buffer[idx++] = 0x00;
@@ -3892,6 +3886,9 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
 
 			submit(transfer);
+
+			// reset
+			mtu_config_request_command_identifier = 0x00;
 
 			// exit the function
 			return;
@@ -4779,272 +4776,272 @@ static uint8_t find_dev(libusb_device **devs)
 	printf("end find_dev()\n");
 }
 
-int main()
-{
-    std::cout << "Hello HCI test!" << std::endl;
-
-	/*
-
-	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
-
-	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
-	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
-
-	std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_dump.pklg";
-
-	std::fstream file(filename, std::ios::in | std::ios::binary);
-	if (!file.is_open())
-	{
-		std::cout << "Could not open " << filename << std::endl;
-
-		return 0;
-	}
-
-	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pklg";
-	std::fstream file_copy;
-	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
-	if (!file_copy.is_open())
-	{
-		std::cout << "Could not open " << filename_copy << std::endl;
-
-		return 0;
-	}
-
-	std::cout << std::endl;
-	while (!file.eof())
-	{
-		if (packetlogger_read_packet(file, [&file_copy](packetlogger_header_t& header, uint8_t hci_packet_type, char* data) -> void {
-			
-			// if string type, output a string
-			if (hci_packet_type >= 0xFB) 
-			{
-				std::string s(data, (header.len - 9));
-				std::cout << s << std::endl;
-			}
-
-			// DEBUG dump packet
-			for (int i = 0; i < header.len - 9; i++)
-			{
-				std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data[i] & 0xFF) << " ";
-			}
-			std::cout << std::dec << std::endl << std::endl;
-
-			if (hci_packet_type < 0xFB) 
-			{
-				// header = length + timestamp
-				file_copy.write(reinterpret_cast<char *>(&header.len), sizeof(header.len));
-				file_copy.write(reinterpret_cast<char *>(&header.ts), sizeof(header.ts));
-
-				// hci packet type
-				file_copy.write(reinterpret_cast<char *>(&hci_packet_type), sizeof(hci_packet_type));
-
-				// data
-				for (int i = 0; i < (header.len - 9); i++)
-				{
-					uint8_t d = data[i];
-					file_copy.write(reinterpret_cast<char *>(&d), sizeof(d));
-				}
-			}
-		}))
-		{
-			std::cout << "Not an Apple (Bluetooth) packetlogger file! " << filename << std::endl;
-
-			file.flush();
-			file.close();
-
-			return -1;
-		}
-	}
-
-	file.flush();
-	file.close();
-
-	return 0;
-	*/
-
-	/*file_copy.flush();
-	file_copy.close();*/
-
-	/*
-	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
-
-	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
-	std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
-
-	std::fstream file(filename, std::ios::in | std::ios::binary);
-	if (!file.is_open())
-	{
-		std::cout << "Could not open " << filename << std::endl;
-
-		return 0;
-	}
-
-	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pcap";
-	std::fstream file_copy;
-	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
-	if (!file_copy.is_open())
-	{
-		std::cout << "Could not open " << filename_copy << std::endl;
-
-		return 0;
-	}
-
-	pcap_hdr_t pcap_hdr;
-	reset_pcap_hdr_t(pcap_hdr);
-
-	// magic_number: used to detect the file format itself and the byte ordering.
-	// The writing application writes 0xa1b2c3d4 with it's native byte ordering 
-	// format into this field. The reading application will read either 0xa1b2c3d4 
-	// (identical) or 0xd4c3b2a1 (swapped). If the reading application reads the 
-	// swapped 0xd4c3b2a1 value, it knows that all the following fields will have to be swapped too.
-	file.read(reinterpret_cast<char *>(&pcap_hdr.magic_number), sizeof(pcap_hdr.magic_number));
-	if (pcap_hdr.magic_number != 2712847316U)
-	{
-		std::cout << "Not a pcap file! " << filename << std::endl;
-		file.close();
-
-		return 0;
-	}
-
-	// version_major, version_minor: the version number of this file format (current version is 2.4)
-	file.read(reinterpret_cast<char *>(&pcap_hdr.version_major), sizeof(pcap_hdr.version_major));
-	file.read(reinterpret_cast<char *>(&pcap_hdr.version_minor), sizeof(pcap_hdr.version_minor));
-
-	// thiszone: the correction time in seconds between GMT (UTC) and the local timezone of
-	// the following packet header timestamps. Examples: If the timestamps are in GMT (UTC),
-	// thiszone is simply 0. If the timestamps are in Central European time (Amsterdam, Berlin, …) 
-	// which is GMT + 1:00, thiszone must be -3600. In practice, time stamps are always in GMT, 
-	// so thiszone is always 0.
-	file.read(reinterpret_cast<char *>(&pcap_hdr.thiszone), sizeof(pcap_hdr.thiszone));
-
-	// sigfigs: in theory, the accuracy of time stamps in the capture; in practice, all tools set it to 0
-	file.read(reinterpret_cast<char *>(&pcap_hdr.sigfigs), sizeof(pcap_hdr.sigfigs));
-
-	// snaplen: the "snapshot length" for the capture (typically 65535 or even more, 
-	// but might be limited by the user), see: incl_len vs. orig_len below
-	file.read(reinterpret_cast<char *>(&pcap_hdr.snaplen), sizeof(pcap_hdr.snaplen));
-
-	// network: link - layer header type, specifying the type of headers at the beginning of 
-	// the packet(e.g. 1 for Ethernet, see tcpdump.org's link-layer header types page for details); 
-	// this can be various types such as 802.11, 802.11 with various radio information, PPP, 
-	// Token Ring, FDDI, etc.
-	file.read(reinterpret_cast<char *>(&pcap_hdr.network), sizeof(pcap_hdr.network));
-
-	// write copy header
-	pcap_hdr_t pcap_hdr_copy;
-	reset_pcap_hdr_t(pcap_hdr_copy);
-
-	pcap_hdr_copy.magic_number = 0xa1b2c3d4;
-	pcap_hdr_copy.version_major = 0x02;
-	pcap_hdr_copy.version_minor = 0x04;
-	pcap_hdr_copy.thiszone = 0x00;
-	pcap_hdr_copy.sigfigs = 0x00;
-	pcap_hdr_copy.snaplen = pcap_hdr.snaplen;//0xFFFF;
-	pcap_hdr_copy.network = 201; //0x01;
-
-	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.magic_number), sizeof(pcap_hdr_copy.magic_number));
-	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_major), sizeof(pcap_hdr_copy.version_major));
-	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_minor), sizeof(pcap_hdr_copy.version_minor));
-	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.thiszone), sizeof(pcap_hdr_copy.thiszone));
-	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.sigfigs), sizeof(pcap_hdr_copy.sigfigs));
-	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.snaplen), sizeof(pcap_hdr_copy.snaplen));
-	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.network), sizeof(pcap_hdr_copy.network));
-
-	std::cout << std::endl;
-	while (!file.eof())
-	{
-		// read packet header
-		pcaprec_hdr_t pcaprec_hdr;
-		reset_pcaprec_hdr_t(pcaprec_hdr);
-		file.read(reinterpret_cast<char *>(&pcaprec_hdr.ts_sec), sizeof(pcaprec_hdr.ts_sec));
-
-		if (file.eof()) {
-			break;
-		}
-
-		file.read(reinterpret_cast<char *>(&pcaprec_hdr.ts_usec), sizeof(pcaprec_hdr.ts_usec));
-		file.read(reinterpret_cast<char *>(&pcaprec_hdr.incl_len), sizeof(pcaprec_hdr.incl_len));
-		file.read(reinterpret_cast<char *>(&pcaprec_hdr.orig_len), sizeof(pcaprec_hdr.orig_len));
-
-		// read the packet payload into a buffer
-		file.read(buffer, pcaprec_hdr.incl_len);
-
-		////std::vector<int8_t> data_as_vector;
-		//// read data
-		//for (int i = 0; i < pcaprec_hdr.incl_len; i++) 
-		//{
-		//	int8_t data;
-		//	file.read(reinterpret_cast<char *>(&data), sizeof(data));
-		//	std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data & 0xFF) << " ";
-		//
-		//	//data_as_vector.push_back(data);
-		//}
-		//std::cout << std::dec << std::endl << std::endl;
-
-		write_pcaprec_hdr_t(file_copy, 1000, pcaprec_hdr.incl_len, reinterpret_cast<unsigned char *>(buffer));
-	}
-
-	file.close();
-
-	file_copy.flush();
-	file_copy.close();
-	*/
-
-/**/
-	/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
-	std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
-	if (!temp_file.is_open())
-	{
-		std::cout << "Could not open " << filename << std::endl;
-		return 0;
-	}
-	file = &temp_file;*/
-
-	std::cout << "libusb_init() ..." << std::endl;
-	int r = libusb_init(&context);
-	if (r < 0)
-	{
-		return r;
-	}
-	std::cout << "libusb_init() done." << std::endl;
-
-#if 1
-	libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
-#endif
-
-	libusb_device **devs;
-
-	std::cout << "libusb_get_device_list() ..." << std::endl;
-	ssize_t cnt = libusb_get_device_list(context, &devs);
-	if (cnt < 0) {
-		libusb_exit(context);
-		context = NULL;
-
-		return (int)cnt;
-	}
-	std::cout << "libusb_get_device_list() done." << std::endl;
-
-	find_dev(devs);
-
-	if (*devs != NULL)
-	{
-		std::cout << "libusb_free_device_list() ..." << std::endl;
-		libusb_free_device_list(devs, 1);
-		*devs = NULL;
-		std::cout << "libusb_free_device_list() done." << std::endl;
-	}
-
-	if (context != NULL)
-	{
-		std::cout << "libusb_exit() ..." << std::endl;
-		libusb_exit(context);
-		context = NULL;
-		std::cout << "libusb_exit() done." << std::endl;
-	}
-
-	file.flush();
-	file.close();
-
-	return 0;
-
-}
+//int main()
+//{
+//    std::cout << "Hello HCI test!" << std::endl;
+//
+//	/*
+//
+//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
+//
+//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
+//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
+//
+//	std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_dump.pklg";
+//
+//	std::fstream file(filename, std::ios::in | std::ios::binary);
+//	if (!file.is_open())
+//	{
+//		std::cout << "Could not open " << filename << std::endl;
+//
+//		return 0;
+//	}
+//
+//	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pklg";
+//	std::fstream file_copy;
+//	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
+//	if (!file_copy.is_open())
+//	{
+//		std::cout << "Could not open " << filename_copy << std::endl;
+//
+//		return 0;
+//	}
+//
+//	std::cout << std::endl;
+//	while (!file.eof())
+//	{
+//		if (packetlogger_read_packet(file, [&file_copy](packetlogger_header_t& header, uint8_t hci_packet_type, char* data) -> void {
+//			
+//			// if string type, output a string
+//			if (hci_packet_type >= 0xFB) 
+//			{
+//				std::string s(data, (header.len - 9));
+//				std::cout << s << std::endl;
+//			}
+//
+//			// DEBUG dump packet
+//			for (int i = 0; i < header.len - 9; i++)
+//			{
+//				std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data[i] & 0xFF) << " ";
+//			}
+//			std::cout << std::dec << std::endl << std::endl;
+//
+//			if (hci_packet_type < 0xFB) 
+//			{
+//				// header = length + timestamp
+//				file_copy.write(reinterpret_cast<char *>(&header.len), sizeof(header.len));
+//				file_copy.write(reinterpret_cast<char *>(&header.ts), sizeof(header.ts));
+//
+//				// hci packet type
+//				file_copy.write(reinterpret_cast<char *>(&hci_packet_type), sizeof(hci_packet_type));
+//
+//				// data
+//				for (int i = 0; i < (header.len - 9); i++)
+//				{
+//					uint8_t d = data[i];
+//					file_copy.write(reinterpret_cast<char *>(&d), sizeof(d));
+//				}
+//			}
+//		}))
+//		{
+//			std::cout << "Not an Apple (Bluetooth) packetlogger file! " << filename << std::endl;
+//
+//			file.flush();
+//			file.close();
+//
+//			return -1;
+//		}
+//	}
+//
+//	file.flush();
+//	file.close();
+//
+//	return 0;
+//	*/
+//
+//	/*file_copy.flush();
+//	file_copy.close();*/
+//
+//	/*
+//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
+//
+//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
+//	std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
+//
+//	std::fstream file(filename, std::ios::in | std::ios::binary);
+//	if (!file.is_open())
+//	{
+//		std::cout << "Could not open " << filename << std::endl;
+//
+//		return 0;
+//	}
+//
+//	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pcap";
+//	std::fstream file_copy;
+//	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
+//	if (!file_copy.is_open())
+//	{
+//		std::cout << "Could not open " << filename_copy << std::endl;
+//
+//		return 0;
+//	}
+//
+//	pcap_hdr_t pcap_hdr;
+//	reset_pcap_hdr_t(pcap_hdr);
+//
+//	// magic_number: used to detect the file format itself and the byte ordering.
+//	// The writing application writes 0xa1b2c3d4 with it's native byte ordering 
+//	// format into this field. The reading application will read either 0xa1b2c3d4 
+//	// (identical) or 0xd4c3b2a1 (swapped). If the reading application reads the 
+//	// swapped 0xd4c3b2a1 value, it knows that all the following fields will have to be swapped too.
+//	file.read(reinterpret_cast<char *>(&pcap_hdr.magic_number), sizeof(pcap_hdr.magic_number));
+//	if (pcap_hdr.magic_number != 2712847316U)
+//	{
+//		std::cout << "Not a pcap file! " << filename << std::endl;
+//		file.close();
+//
+//		return 0;
+//	}
+//
+//	// version_major, version_minor: the version number of this file format (current version is 2.4)
+//	file.read(reinterpret_cast<char *>(&pcap_hdr.version_major), sizeof(pcap_hdr.version_major));
+//	file.read(reinterpret_cast<char *>(&pcap_hdr.version_minor), sizeof(pcap_hdr.version_minor));
+//
+//	// thiszone: the correction time in seconds between GMT (UTC) and the local timezone of
+//	// the following packet header timestamps. Examples: If the timestamps are in GMT (UTC),
+//	// thiszone is simply 0. If the timestamps are in Central European time (Amsterdam, Berlin, …) 
+//	// which is GMT + 1:00, thiszone must be -3600. In practice, time stamps are always in GMT, 
+//	// so thiszone is always 0.
+//	file.read(reinterpret_cast<char *>(&pcap_hdr.thiszone), sizeof(pcap_hdr.thiszone));
+//
+//	// sigfigs: in theory, the accuracy of time stamps in the capture; in practice, all tools set it to 0
+//	file.read(reinterpret_cast<char *>(&pcap_hdr.sigfigs), sizeof(pcap_hdr.sigfigs));
+//
+//	// snaplen: the "snapshot length" for the capture (typically 65535 or even more, 
+//	// but might be limited by the user), see: incl_len vs. orig_len below
+//	file.read(reinterpret_cast<char *>(&pcap_hdr.snaplen), sizeof(pcap_hdr.snaplen));
+//
+//	// network: link - layer header type, specifying the type of headers at the beginning of 
+//	// the packet(e.g. 1 for Ethernet, see tcpdump.org's link-layer header types page for details); 
+//	// this can be various types such as 802.11, 802.11 with various radio information, PPP, 
+//	// Token Ring, FDDI, etc.
+//	file.read(reinterpret_cast<char *>(&pcap_hdr.network), sizeof(pcap_hdr.network));
+//
+//	// write copy header
+//	pcap_hdr_t pcap_hdr_copy;
+//	reset_pcap_hdr_t(pcap_hdr_copy);
+//
+//	pcap_hdr_copy.magic_number = 0xa1b2c3d4;
+//	pcap_hdr_copy.version_major = 0x02;
+//	pcap_hdr_copy.version_minor = 0x04;
+//	pcap_hdr_copy.thiszone = 0x00;
+//	pcap_hdr_copy.sigfigs = 0x00;
+//	pcap_hdr_copy.snaplen = pcap_hdr.snaplen;//0xFFFF;
+//	pcap_hdr_copy.network = 201; //0x01;
+//
+//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.magic_number), sizeof(pcap_hdr_copy.magic_number));
+//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_major), sizeof(pcap_hdr_copy.version_major));
+//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_minor), sizeof(pcap_hdr_copy.version_minor));
+//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.thiszone), sizeof(pcap_hdr_copy.thiszone));
+//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.sigfigs), sizeof(pcap_hdr_copy.sigfigs));
+//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.snaplen), sizeof(pcap_hdr_copy.snaplen));
+//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.network), sizeof(pcap_hdr_copy.network));
+//
+//	std::cout << std::endl;
+//	while (!file.eof())
+//	{
+//		// read packet header
+//		pcaprec_hdr_t pcaprec_hdr;
+//		reset_pcaprec_hdr_t(pcaprec_hdr);
+//		file.read(reinterpret_cast<char *>(&pcaprec_hdr.ts_sec), sizeof(pcaprec_hdr.ts_sec));
+//
+//		if (file.eof()) {
+//			break;
+//		}
+//
+//		file.read(reinterpret_cast<char *>(&pcaprec_hdr.ts_usec), sizeof(pcaprec_hdr.ts_usec));
+//		file.read(reinterpret_cast<char *>(&pcaprec_hdr.incl_len), sizeof(pcaprec_hdr.incl_len));
+//		file.read(reinterpret_cast<char *>(&pcaprec_hdr.orig_len), sizeof(pcaprec_hdr.orig_len));
+//
+//		// read the packet payload into a buffer
+//		file.read(buffer, pcaprec_hdr.incl_len);
+//
+//		////std::vector<int8_t> data_as_vector;
+//		//// read data
+//		//for (int i = 0; i < pcaprec_hdr.incl_len; i++) 
+//		//{
+//		//	int8_t data;
+//		//	file.read(reinterpret_cast<char *>(&data), sizeof(data));
+//		//	std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data & 0xFF) << " ";
+//		//
+//		//	//data_as_vector.push_back(data);
+//		//}
+//		//std::cout << std::dec << std::endl << std::endl;
+//
+//		write_pcaprec_hdr_t(file_copy, 1000, pcaprec_hdr.incl_len, reinterpret_cast<unsigned char *>(buffer));
+//	}
+//
+//	file.close();
+//
+//	file_copy.flush();
+//	file_copy.close();
+//	*/
+//
+///**/
+//	/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
+//	std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+//	if (!temp_file.is_open())
+//	{
+//		std::cout << "Could not open " << filename << std::endl;
+//		return 0;
+//	}
+//	file = &temp_file;*/
+//
+//	std::cout << "libusb_init() ..." << std::endl;
+//	int r = libusb_init(&context);
+//	if (r < 0)
+//	{
+//		return r;
+//	}
+//	std::cout << "libusb_init() done." << std::endl;
+//
+//#if 1
+//	libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
+//#endif
+//
+//	libusb_device **devs;
+//
+//	std::cout << "libusb_get_device_list() ..." << std::endl;
+//	ssize_t cnt = libusb_get_device_list(context, &devs);
+//	if (cnt < 0) {
+//		libusb_exit(context);
+//		context = NULL;
+//
+//		return (int)cnt;
+//	}
+//	std::cout << "libusb_get_device_list() done." << std::endl;
+//
+//	find_dev(devs);
+//
+//	if (*devs != NULL)
+//	{
+//		std::cout << "libusb_free_device_list() ..." << std::endl;
+//		libusb_free_device_list(devs, 1);
+//		*devs = NULL;
+//		std::cout << "libusb_free_device_list() done." << std::endl;
+//	}
+//
+//	if (context != NULL)
+//	{
+//		std::cout << "libusb_exit() ..." << std::endl;
+//		libusb_exit(context);
+//		context = NULL;
+//		std::cout << "libusb_exit() done." << std::endl;
+//	}
+//
+//	file.flush();
+//	file.close();
+//
+//	return 0;
+//
+//}

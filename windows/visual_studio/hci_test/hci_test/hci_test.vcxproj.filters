@@ -25,6 +25,12 @@
     <Filter Include="Quelldateien\apple_pklg">
       <UniqueIdentifier>{c0b37d1f-819e-4c93-9a94-bda46cc39ebb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Headerdateien\sdp">
+      <UniqueIdentifier>{73adfa7a-42d4-4985-bf87-eb5f5dbac912}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Quelldateien\sdp">
+      <UniqueIdentifier>{53977dbc-465a-4717-a8b3-86ec3b5cceb4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="hci_test.cpp">
@@ -37,6 +43,12 @@
       <Filter>Quelldateien\apple_pklg</Filter>
     </ClCompile>
     <ClCompile Include="spp_client.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\sdp\sdp.cpp">
+      <Filter>Quelldateien\sdp</Filter>
+    </ClCompile>
+    <ClCompile Include="sdp_test.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
   </ItemGroup>
@@ -52,6 +64,9 @@
     </ClInclude>
     <ClInclude Include="command_template.h">
       <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\sdp\sdp.h">
+      <Filter>Headerdateien\sdp</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

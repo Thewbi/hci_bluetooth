@@ -1,0 +1,1172 @@
+= Service Discovery Protocol SDP =
+
+The SDP is used by a client/application to find out what services are provided by a server.
+
+== Links ==
+http://sgerwk.altervista.org/bluetooth/sdp.html
+
+
+
+
+
+== Data Elements ==
+
+3.1   DATA ELEMENT
+A data element is a typed data representation. 
+It consists of two fields: 
+- a header field 
+	- type descriptor ------- type of data stored in the payload
+	- size descriptor ------- (3 Bit) Take the value stored here and index into table 3.2 (Size Descriptor Table) to find out what the real size is:
+- a data field. 
+	- size descriptor (X Byte, X depends on the size descriptor which indexes into the Size Descriptor Table, X can be 0 so this field is optional)
+	- payload ("size descriptor" - many bytes)
+
+The header field, in turn, is composed of two 
+parts: a type descriptor and a size descriptor. 
+
+The data is a sequence of bytes 
+whose length is specified in the size descriptor (described in Section 3.3 on 
+page 221) and whose meaning is (partially) specified by the type descriptor.
+
+Example:
+Data Element: Sequence uint8 3 bytes
+	0011 0... = Data Element Type: Sequence (6)
+	.... .101 = Data Element Size: uint8 (5)
+	Data Element Var Size: 3
+	Data Value
+		Data Element: UUID 2 bytes
+			0001 1... = Data Element Type: UUID (3)
+			.... .001 = Data Element Size: 2 bytes (1)
+			Data Value
+				Value: UUID: Serial Port (0x1101)
+
+
+Type Descriptor Types:
+
+Type Descriptor Value        	Valid Size Descriptor              			Values Type Description
+								(indexes into the Size Descriptor Table)
+0 								0 											Nil, the null type 
+1 								0, 1, 2, 3, 4 								Unsigned Integer 
+2 								0, 1, 2, 3, 4 								Signed twos-complement integer
+3 								1, 2, 4 									UUID, a universally unique identifier
+4 								5, 6, 7 									Text string
+5 								0 											Boolean
+6 								5, 6, 7 									Data element sequence, a data element whose data field  is a sequence of data elements
+7 								5, 6, 7 									Data element alternative, data element whose data field is a sequence of data elements from which one data element is to be selected.
+8 								5, 6, 7 									URL, a uniform resource locator
+9-31 																		Reserved
+
+
+
+Size Descriptor Table
+
+Size Index						Additional bits 	Data Size
+0 								0 					1 byte. Exception: if the data element type is nil, the data size is 0 bytes.
+1 								0 					2 bytes
+2 								0 					4 bytes
+3 								0 					8 bytes
+4 								0 					16 bytes
+5 								8 					The data size is contained in the additional 8 bits, which are interpreted as an unsigned integer.
+6 								16 					The data size is contained in the additional 16 bits, which are interpreted as an unsigned integer.
+7 								32 					The data size is contained in the additional 32 bits, which are interpreted as an unsigned integer.
+
+
+Data Elements have
+- a combined "Data Element Type (5 bit) + Date Element Size (3 bit)" field (1 Byte)
+- OPTIONAL: [a optional Data Element Var Size field (1 byte)]
+  This optional field is present if the "Data Element Type" is 0x06 == Sequence.
+  The size of this optional field in bytes is stored in the "Date Element Size (3 bit)" part of the combined field
+  If the type is 0x01 == Unsigned Integer or 0x03 == UUID, then there is no following "data value" field.
+  Instead the length of the "data value" is read directly from the "Date Element Size (3 bit)" part of the combined field
+- "data value" bytes (Basically this is the payload of the Date Element.
+
+The size of "data values / payload" in bytes is determined by the preceding "Data Element Var Size field"
+
+The payload of a Data Element can again be a nested Data Element or a primitve Data Type.
+This will form a hierarchical tree of Data Elements.
+For a Data Element Node in the tree to have several children, it has to contain a sequence (Data Element Type = 0x06). 
+
+Data Elements are the basic building blocks of SDP requests and responses.
+
+A general parser for Data Elements can be written, which converts requests and 
+responses into a tree of "Data Element"-Nodes without any special knowledge about
+what the data inside the "Data Element"-Nodes really mean.
+
+Data Element Types:
+Nil - 0x00
+Unsigned Integer - 0x01
+UUID - 0x03
+Text String - 0x04
+Sequence - 0x06
+
+
+
+
+
+== SDP tree parsing algorithm ==
+
+class DataElement
+{
+	uint16_t start_index;
+	
+	// index into the Type Descriptor table, the type stored in the body
+	uint8_t type;
+	
+	// how many bytes the body consist of, retrieved via the "size descriptor" and optionally the "Data Element Var Size"
+	uint16_t dataElementVarSizeInBytes;
+	
+	// memory for possible payload stored in the body
+	uint32_t value_uint32;
+	uint16_t value_uuid;
+	std::string value_text;
+	boolean value_bool;
+	std::string value_url;
+	
+	DataElement* parent;
+	std::vector<DataElement> children;
+};
+
+given a 
+- byte array called "data"
+- start index called "index" into the byte array where the root Data Element starts
+
+retrieve a DataElement for the root node.
+Set pointer currentDataElement to the root node DataElement
+
+call readDataElementHeader(data, index, currentDataElement);
+
+readDataElementHeader() ::=
+Read the currentDataElement:
+- read Data Element Type
+- read Data Element Size, resolve into Size Descriptor Table, determine how many bytes "Data Element Var Size" follow
+  and store that value in bytes into currentDataElement->dataElementVarSizeInBytes
+- optionally read "Data Element Var Size"
+
+// increment the index to the start of the body of the current DataElement
+index = index + 1 + currentDataElement->dataElementVarSizeInBytes
+
+--> Start a loop.
+
+	// read data element body
+	call readDataElementBody(data, index, currentDataElement)
+
+	readDataElementBody(data, index, currentDataElement) ::= 
+	switch over the currentDataElement->Data Element Type
+	for primitive types, string, boolean, URL just read the data 
+		-------> DataElement was read entirely, update "index" and add the amount of bytes just consumed
+		-------> check if the currentDataElement->parent pointer is not null
+		-------> if the currentDataElement->parent pointer 
+			Is null ----> DONE
+			Is not null ----> set currentDataElement = currentDataElement->parent;
+		
+	for "Data element alternative" -> throw a not implemented exception
+
+	for "Data element sequence" --> 
+	//    --> Start a loop.
+		--> Check if the entire sequence has already been read by computing "index" >= start_index + dataElementVarSizeInBytes
+			--> if this is the case, update "index" and add the amount of bytes just consumed
+			-------> check if the currentDataElement->parent pointer is not null
+			-------> if the currentDataElement->parent pointer 
+				Is null ----> DONE
+				Is not null ----> set currentDataElement = currentDataElement->parent;
+				execute the continue keyword so the steps below are not executed any more
+	//	    --> if this is the case, break the loop
+		--> Create a new DataElement for this sub DataElement. PushBack a new element into the vector.
+		--> Connect pointers back and forth between the parent (= currentDataElement) and this new DataElement
+		--> Add the new DataElement into the array "children" of the parent
+		--> Set currentDataElement pointer to the new DataElement
+		--> call readDataElementHeader(data, index, currentDataElement);
+	// NO RECURSION	--> call readDataElementBody(data, index, currentDataElement);
+
+
+
+
+
+
+== Parsing an SDP request ==
+
+All bytes wrapped inside a L2CAP packet of PSM 0x0001 (= SDP) is part of an SDP request or response.
+
+The SDP packet has the following structure
+
+PDU - (1 Byte) 
+	0x06 == Service Search Attribute Request
+Transaction ID - (2 Byte)
+Parameter Length - (2 Byte) This value is the amount of bytes that follow and make up the Request or Response
+Data Element - (Variable Amount of Bytes) - Service Search Pattern
+Maximum Attribute Count - (2 Byte) - No more than "Maximum Attribute Count" attributes should be returned
+Data Element - (Variable Amount of Bytes) - Attribute ID List
+Continuation State - (1 Byte)
+
+
+== Parsing an SDP request ==
+
+All bytes wrapped inside a L2CAP packet of PSM 0x0001 (= SDP) is part of an SDP request or response.
+
+The SDP packet has the following structure
+
+PDU - (1 Byte)
+	0x07 == Service Search Attribute Response
+Transaction ID - (2 Byte)
+Parameter Length - (2 Byte) This value is the amount of bytes that follow and make up the Request or Response
+Attribute List Byte Count - (2 Byte) - length in bytes of the Attribut List
+Data Element - (Attribut List) - 
+Continuation State - (1 Byte)
+
+
+
+
+
+
+
+
+== TODO ==
+
+write a general parser for a tree of Data Elements.
+
+Start a SPP_Counter on the macbook and send the Example Request 1 to it.
+Example Request 1 is a request for Serial Port (0x1101).
+Then parse the returned result using the Data Elements parser
+
+Also parse the Reponse to example request 2 below!
+
+
+
+
+
+== Service Search Attribute Request ==
+
+The idea is that an application provides a set of attributes and all services that fulfill
+those attributes are then returned.
+
+
+
+
+
+
+
+=== Example Request 1 ===
+
+This request commands the server to return all attributes in the range (0x0000 - 0xffff)
+of all services of type Serial Port (0x1101). To formulate this request, the "Service Search Pattern"
+is set to the UUID for Serial Port (0x1101) and the "Attribute ID List" is set to an
+Attribute Range From: 0x0000 to Attribute Range To: 0xffff
+
+Service Search Attribute Request : Serial Port: Attribute Range (0x0000 - 0xffff)
+	
+03 0b 20 18 00 14 00 41 00 06 00 00 00 0f 35 03 19 11 01 03 f0 35 05 0a 00 00 ff ff 00
+
+Frame 69: 29 bytes on wire (232 bits), 29 bytes captured (232 bits)
+    Encapsulation type: Apple Bluetooth PacketLogger (118)
+    Arrival Time: Jan  1, 1970 01:00:00.000000000 Mitteleuropäische Zeit
+    [Time shift for this packet: 0.000000000 seconds]
+    Epoch Time: 0.000000000 seconds
+    [Time delta from previous captured frame: 0.000000000 seconds]
+    [Time delta from previous displayed frame: 0.000000000 seconds]
+    [Time since reference or first frame: 0.000000000 seconds]
+    Frame Number: 69
+    Frame Length: 29 bytes (232 bits)
+    Capture Length: 29 bytes (232 bits)
+    [Frame is marked: False]
+    [Frame is ignored: False]
+    [Protocols in frame: bluetooth:packetlogger:bthci_acl:btl2cap:btsdp]
+Bluetooth
+    [Source: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+    [Destination: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+PacketLogger Recv ACL Data
+    Type: Recv ACL Data (0x03)
+Bluetooth HCI ACL Packet
+    .... 0000 0000 1011 = Connection Handle: 0x00b
+    ..10 .... .... .... = PB Flag: First Automatically Flushable Packet (2)
+    00.. .... .... .... = BC Flag: Point-To-Point (0)
+    Data Total Length: 24
+    Data
+    [Connect in frame: 45]
+    [Source BD_ADDR: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+    [Source Device Name: ]
+    [Source Role: Master (1)]
+    [Destination BD_ADDR: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+    [Destination Device Name: WFB Counter 5C:F3:70:7D:0E:96]
+    [Destination Role: Slave (2)]
+    [Last Role Change in Frame: 43]
+    [Current Mode: Active Mode (0)]
+    [Last Mode Change in Frame: 45]
+Bluetooth L2CAP Protocol
+    Length: 20
+    CID: Dynamically Allocated Channel (0x0041)
+    [Connect in frame: 57]
+    [PSM: SDP (0x0001)]
+Bluetooth SDP Protocol
+    PDU: Service Search Attribute Request (0x06)
+    Transaction Id: 0x0000
+    Parameter Length: 15
+    Service Search Pattern: Serial Port
+        Data Element: Sequence uint8 3 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .101 = Data Element Size: uint8 (5)
+            Data Element Var Size: 3
+            Data Value
+                Data Element: UUID 2 bytes
+                    0001 1... = Data Element Type: UUID (3)
+                    .... .001 = Data Element Size: 2 bytes (1)
+                    Data Value
+                        Value: UUID: Serial Port (0x1101)
+    Maximum Attribute Byte Count: 1008
+    Attribute ID List
+        Data Element: Sequence uint8 5 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .101 = Data Element Size: uint8 (5)
+            Data Element Var Size: 5
+            Data Value
+                Data Element: Unsigned Integer 4 bytes
+                    0000 1... = Data Element Type: Unsigned Integer (1)
+                    .... .010 = Data Element Size: 4 bytes (2)
+                    Data Value
+                        Attribute Range: 0x0000ffff
+                            Attribute Range From: 0x0000
+                            Attribute Range To: 0xffff
+    Continuation State: no (00)
+
+
+
+
+
+
+
+
+
+
+=== Example Request 2 ===
+
+This request commands the server to return all attributes in the range (0x0000 - 0xffff)
+of all services of type L2CAP (0x0100)). To formulate this request, the "Service Search Pattern"
+is set to the UUID for L2CAP (0x0100) and the "Attribute ID List" is set to an
+Attribute Range From: 0x0000 to Attribute Range To: 0xffff
+
+Service Search Attribute Request : L2CAP: Attribute Range (0x0000 - 0xffff)
+
+03 0b 20 18 00 14 00 44 00 06 00 00 00 0f 35 03 19 01 00 03 f0 35 05 0a 00 00 ff ff 00
+
+-- PacketLogger Recv ACL Data
+03 
+
+-- Bluetooth HCI ACL Packet
+0b 20 
+18 00 
+
+-- Bluetooth L2CAP Protocol
+14 00 
+44 00 
+
+-- Bluetooth SDP Protocol
+06 - PDU: Service Search Attribute Request
+00 00 - Transaction Id
+00 0f - Paramter Length
+
+-- SDP Data Element
+35 
+03 - Data Element Var size
+19 - Data Element Type + Size
+01 00 - var size
+03 f0 - Maximum Attribute Byte Count
+
+-- SDP Data Element
+35 
+05 - Data Element Var size 
+0a - Data Element Type + Size
+00 00 - Attribute Range From
+ff ff - Attribute Range To
+
+-- Continuation State
+00 - 0x00 (no)
+
+Frame 472: 29 bytes on wire (232 bits), 29 bytes captured (232 bits)
+    Encapsulation type: Apple Bluetooth PacketLogger (118)
+    Arrival Time: Apr 14, 2055 02:23:36.000000000 Mitteleuropäische Sommerzeit
+    [Time shift for this packet: 0.000000000 seconds]
+    Epoch Time: -1603692280.000000000 seconds
+    [Time delta from previous captured frame: 1.000000000 seconds]
+    [Time delta from previous displayed frame: 1.000000000 seconds]
+    [Time since reference or first frame: 19683.000000000 seconds]
+    Frame Number: 472
+    Frame Length: 29 bytes (232 bits)
+    Capture Length: 29 bytes (232 bits)
+    [Frame is marked: False]
+    [Frame is ignored: False]
+    [Protocols in frame: bluetooth:packetlogger:bthci_acl:btl2cap:btsdp]
+Bluetooth
+    [Source: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+    [Destination: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+PacketLogger Recv ACL Data
+    Type: Recv ACL Data (0x03)
+Bluetooth HCI ACL Packet
+    .... 0000 0000 1011 = Connection Handle: 0x00b
+    ..10 .... .... .... = PB Flag: First Automatically Flushable Packet (2)
+    00.. .... .... .... = BC Flag: Point-To-Point (0)
+    Data Total Length: 24
+    Data
+    [Connect in frame: 259]
+    [Disconnect in frame: 650]
+    [Source BD_ADDR: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+    [Source Device Name: ]
+    [Source Role: Master (1)]
+    [Destination BD_ADDR: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+    [Destination Device Name: SPP Counter 5C:F3:70:7D:0E:96]
+    [Destination Role: Slave (2)]
+    [Last Role Change in Frame: 256]
+    [Current Mode: Active Mode (0)]
+    [Last Mode Change in Frame: 259]
+Bluetooth L2CAP Protocol
+    Length: 20
+    CID: Dynamically Allocated Channel (0x0044)
+    [Connect in frame: 431]
+    [Disconnect in frame: 493]
+    [PSM: SDP (0x0001)]
+Bluetooth SDP Protocol
+    PDU: Service Search Attribute Request (0x06)
+    Transaction Id: 0x0000
+    Parameter Length: 15
+    Service Search Pattern: L2CAP
+        Data Element: Sequence uint8 3 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .101 = Data Element Size: uint8 (5)
+            Data Element Var Size: 3
+            Data Value
+                Data Element: UUID 2 bytes
+                    0001 1... = Data Element Type: UUID (3)
+                    .... .001 = Data Element Size: 2 bytes (1)
+                    Data Value
+                        Value: UUID: L2CAP (0x0100)
+    Maximum Attribute Byte Count: 1008
+    Attribute ID List
+        Data Element: Sequence uint8 5 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .101 = Data Element Size: uint8 (5)
+            Data Element Var Size: 5
+            Data Value
+                Data Element: Unsigned Integer 4 bytes
+                    0000 1... = Data Element Type: Unsigned Integer (1)
+                    .... .010 = Data Element Size: 4 bytes (2)
+                    Data Value
+                        Attribute Range: 0x0000ffff
+                            Attribute Range From: 0x0000
+                            Attribute Range To: 0xffff
+    Continuation State: no (00)
+
+=== Response to Example Request 2 ===
+
+Service Search Attribute Response 
+
+0000   02 0b 00 6e 00 6a 00 50 00 07 00 00 00 65 00 62
+0010   36 00 5f 36 00 5c 09 00 00 0a 00 01 00 01 09 00
+0020   01 36 00 03 19 11 01 09 00 04 36 00 0e 36 00 03
+0030   19 01 00 36 00 05 19 00 03 08 01 09 00 05 36 00
+0040   03 19 10 02 09 00 06 36 00 09 09 65 6e 09 00 6a
+0050   09 01 00 09 00 09 36 00 09 36 00 06 19 11 01 09
+0060   11 02 09 01 00 25 0b 53 50 50 20 43 6f 75 6e 74
+0070   65 72 00
+
+Frame 474: 115 bytes on wire (920 bits), 115 bytes captured (920 bits)
+    Encapsulation type: Apple Bluetooth PacketLogger (118)
+    Arrival Time: Apr 14, 2055 02:23:36.000000000 Mitteleuropäische Sommerzeit
+    [Time shift for this packet: 0.000000000 seconds]
+    Epoch Time: -1603692280.000000000 seconds
+    [Time delta from previous captured frame: 0.000000000 seconds]
+    [Time delta from previous displayed frame: 0.000000000 seconds]
+    [Time since reference or first frame: 19683.000000000 seconds]
+    Frame Number: 474
+    Frame Length: 115 bytes (920 bits)
+    Capture Length: 115 bytes (920 bits)
+    [Frame is marked: False]
+    [Frame is ignored: False]
+    [Protocols in frame: bluetooth:packetlogger:bthci_acl:btl2cap:btsdp]
+Bluetooth
+    [Source: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+    [Destination: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+PacketLogger Sent ACL Data
+    Type: Sent ACL Data (0x02)
+Bluetooth HCI ACL Packet
+    .... 0000 0000 1011 = Connection Handle: 0x00b
+    ..00 .... .... .... = PB Flag: First Non-automatically Flushable Packet (0)
+    00.. .... .... .... = BC Flag: Point-To-Point (0)
+    Data Total Length: 110
+    Data
+    [Connect in frame: 259]
+    [Disconnect in frame: 650]
+    [Source BD_ADDR: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+    [Source Device Name: SPP Counter 5C:F3:70:7D:0E:96]
+    [Source Role: Slave (2)]
+    [Destination BD_ADDR: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+    [Destination Device Name: ]
+    [Destination Role: Master (1)]
+    [Last Role Change in Frame: 256]
+    [Current Mode: Active Mode (0)]
+    [Last Mode Change in Frame: 259]
+Bluetooth L2CAP Protocol
+    Length: 106
+    CID: Dynamically Allocated Channel (0x0050)
+    [Connect in frame: 431]
+    [Disconnect in frame: 493]
+    [PSM: SDP (0x0001)]
+Bluetooth SDP Protocol
+    PDU: Service Search Attribute Response (0x07)
+    Transaction Id: 0x0000
+    Parameter Length: 101
+    Attribute List Byte Count: 98
+    Attribute Lists [count =  1]
+        Data Element: Sequence uint16 95 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .110 = Data Element Size: uint16 (6)
+            Data Element Var Size: 95
+            Data Value
+                Attribute List [count =  7] (Serial Port)
+                    Data Element: Sequence uint16 92 bytes
+                        0011 0... = Data Element Type: Sequence (6)
+                        .... .110 = Data Element Size: uint16 (6)
+                        Data Element Var Size: 92
+                        Data Value
+                            Service Attribute: Service Record Handle (0x0), value = 0x00010001 (65537)
+                                Attribute ID: Service Record Handle
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Service Record Handle (0x0000)
+                                Value
+                                    Data Element: Unsigned Integer 4 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .010 = Data Element Size: 4 bytes (2)
+                                        Data Value
+                                            Service Record Handle: 0x00010001
+                            Service Attribute: Service Class ID List (0x1), value = Serial Port
+                                Attribute ID: Service Class ID List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Service Class ID List (0x0001)
+                                Value
+                                    Data Element: Sequence uint16 3 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 3
+                                        Data Value
+                                            Data Element: UUID 2 bytes
+                                                0001 1... = Data Element Type: UUID (3)
+                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                Data Value
+                                                    Value: UUID: Serial Port (0x1101)
+                            Service Attribute: Protocol Descriptor List (0x4), value = L2CAP -> RFCOMM -> Unknown
+                                Attribute ID: Protocol Descriptor List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Protocol Descriptor List (0x0004)
+                                Value
+                                    Data Element: Sequence uint16 14 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 14
+                                        Data Value
+                                            Protocol #1: L2CAP
+                                                Data Element: Sequence uint16 3 bytes
+                                                    0011 0... = Data Element Type: Sequence (6)
+                                                    .... .110 = Data Element Size: uint16 (6)
+                                                    Data Element Var Size: 3
+                                                    Data Value
+                                                        Protocol Entry: L2CAP
+                                                            Data Element: UUID 2 bytes
+                                                                0001 1... = Data Element Type: UUID (3)
+                                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                                Data Value
+                                                                    Value: UUID: L2CAP (0x0100)
+                                            Protocol #2: RFCOMM
+                                                Data Element: Sequence uint16 5 bytes
+                                                    0011 0... = Data Element Type: Sequence (6)
+                                                    .... .110 = Data Element Size: uint16 (6)
+                                                    Data Element Var Size: 5
+                                                    Data Value
+                                                        Protocol Entry: RFCOMM
+                                                            Data Element: UUID 2 bytes
+                                                                0001 1... = Data Element Type: UUID (3)
+                                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                                Data Value
+                                                                    Value: UUID: RFCOMM (0x0003)
+                                            Protocol #3: Unknown
+                                                Data Element: Unsigned Integer 1 byte (0 bytes if Nil)
+                                                    0000 1... = Data Element Type: Unsigned Integer (1)
+                                                    .... .000 = Data Element Size: 1 byte (0 bytes if Nil) (0)
+                                                    Data Value
+                                                        Protocol Entry: Unknown
+                                                            Data Element: Nil 2 bytes
+                                                                0000 0... = Data Element Type: Nil (0)
+                                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                                Data Value
+                                                                    Value: UUID: Unknown (0x0900)
+                            Service Attribute: Browse Group List (0x5), value = Public Browse Group
+                                Attribute ID: Browse Group List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Browse Group List (0x0005)
+                                Value
+                                    Data Element: Sequence uint16 3 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 3
+                                        Data Value
+                                            Data Element: UUID 2 bytes
+                                                0001 1... = Data Element Type: UUID (3)
+                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                Data Value
+                                                    Value: UUID: Public Browse Group (0x1002)
+                            Service Attribute: Language Base Attribute ID List (0x6), value = (Lang: en, Encoding: UTF-8, Attribute Base: 0x0100)
+                                Attribute ID: Language Base Attribute ID List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Language Base Attribute ID List (0x0006)
+                                Value
+                                    Data Element: Sequence uint16 9 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 9
+                                        Data Value
+                                            Language #1: Lang: en, Encoding: UTF-8, Attribute Base: 0x0100
+                                                Data Element: Unsigned Integer 2 bytes
+                                                    0000 1... = Data Element Type: Unsigned Integer (1)
+                                                    .... .001 = Data Element Size: 2 bytes (1)
+                                                    Data Value
+                                                        Language Code: en
+                                                Data Element: Unsigned Integer 2 bytes
+                                                    0000 1... = Data Element Type: Unsigned Integer (1)
+                                                    .... .001 = Data Element Size: 2 bytes (1)
+                                                    Data Value
+                                                        Language Encoding: UTF-8 (106)
+                                                Data Element: Unsigned Integer 2 bytes
+                                                    0000 1... = Data Element Type: Unsigned Integer (1)
+                                                    .... .001 = Data Element Size: 2 bytes (1)
+                                                    Data Value
+                                                        Attribute Base: 0x0100
+                            Service Attribute: Bluetooth Profile Descriptor List (0x9), value = Serial Port 11.2
+                                Attribute ID: Bluetooth Profile Descriptor List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Bluetooth Profile Descriptor List (0x0009)
+                                Value
+                                    Data Element: Sequence uint16 9 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 9
+                                        Data Value
+                                            Data Element: Sequence uint16 6 bytes
+                                                0011 0... = Data Element Type: Sequence (6)
+                                                .... .110 = Data Element Size: uint16 (6)
+                                                Data Element Var Size: 6
+                                                Data Value
+                                                    Profile Descriptor List #1: Serial Port, Version 11.2
+                                                        Data Element: UUID 2 bytes
+                                                            0001 1... = Data Element Type: UUID (3)
+                                                            .... .001 = Data Element Size: 2 bytes (1)
+                                                            Data Value
+                                                                Value: UUID: Serial Port (0x1101)
+                                                        Data Element: Unsigned Integer 2 bytes
+                                                            0000 1... = Data Element Type: Unsigned Integer (1)
+                                                            .... .001 = Data Element Size: 2 bytes (1)
+                                                            Data Value
+                                                                Protocol Version: 0x1102
+                            Service Attribute: Service Name (0x100), value = SPP Counter
+                                Attribute ID: Service Name
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Service Name (0x0100)
+                                Value
+                                    Data Element: Text string uint8 11 bytes
+                                        0010 0... = Data Element Type: Text string (4)
+                                        .... .101 = Data Element Size: uint8 (5)
+                                        Data Element Var Size: 11
+                                        Data Value
+                                            Service Name: SPP Counter
+    Continuation State: no (00)
+
+
+
+
+== Example Request and Response with empty DataElement ==
+
+=== Request ===
+
+02 2a 10 08 00 35 05 0a 00 00 ff ff 00
+
+Frame 77: 13 bytes on wire (104 bits), 13 bytes captured (104 bits)
+    Encapsulation type: Bluetooth H4 with linux header (99)
+    Arrival Time: Apr  8, 2006 15:28:53.117615000 Mitteleuropäische Sommerzeit
+    [Time shift for this packet: 0.000000000 seconds]
+    Epoch Time: 1144502933.117615000 seconds
+    [Time delta from previous captured frame: 0.000988000 seconds]
+    [Time delta from previous displayed frame: 0.000988000 seconds]
+    [Time since reference or first frame: 146.955458000 seconds]
+    Frame Number: 77
+    Frame Length: 13 bytes (104 bits)
+    Capture Length: 13 bytes (104 bits)
+    [Frame is marked: False]
+    [Frame is ignored: False]
+    Point-to-Point Direction: Received (1)
+    [Protocols in frame: bluetooth:hci_h4:bthci_acl:btl2cap:btsdp]
+Bluetooth
+    [Source: MurataMa_07:2e:fa (00:0e:6d:07:2e:fa)]
+    [Destination: 00:00:00_00:00:00 (00:00:00:00:00:00)]
+Bluetooth HCI H4
+    [Direction: Rcvd (0x01)]
+    HCI Packet Type: ACL Data (0x02)
+Bluetooth HCI ACL Packet
+    .... 0000 0010 1010 = Connection Handle: 0x02a
+    ..01 .... .... .... = PB Flag: Continuing Fragment (1)
+    00.. .... .... .... = BC Flag: Point-To-Point (0)
+    Data Total Length: 8
+    [This is a continuation to the PDU in frame: 76]
+    Data Fragment
+    [Connect in frame: 52]
+    [Disconnect in frame: 89]
+    [Source BD_ADDR: MurataMa_07:2e:fa (00:0e:6d:07:2e:fa)]
+    [Source Device Name: ]
+    [Source Role: Master (1)]
+    [Destination BD_ADDR: 00:00:00_00:00:00 (00:00:00:00:00:00)]
+    [Destination Device Name: ]
+    [Destination Role: Slave (2)]
+    [Last Role Change in Frame: 47]
+    [Current Mode: Active Mode (0)]
+    [Last Mode Change in Frame: 52]
+Bluetooth L2CAP Protocol
+    Length: 21
+    CID: Dynamically Allocated Channel (0x0040)
+    [Connect in frame: 64]
+    [Disconnect in frame: 83]
+    [PSM: SDP (0x0001)]
+Bluetooth SDP Protocol
+    PDU: Service Search Attribute Request (0x06)
+    Transaction Id: 0x0001
+    Parameter Length: 16
+    Service Search Pattern: Headset
+        Data Element: Sequence uint16 3 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .110 = Data Element Size: uint16 (6)
+            Data Element Var Size: 3
+            Data Value
+                Data Element: UUID 2 bytes
+                    0001 1... = Data Element Type: UUID (3)
+                    .... .001 = Data Element Size: 2 bytes (1)
+                    Data Value
+                        Value: UUID: Headset (0x1108)
+    Maximum Attribute Byte Count: 672
+    Attribute ID List
+        Data Element: Sequence uint8 5 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .101 = Data Element Size: uint8 (5)
+            Data Element Var Size: 5
+            Data Value
+                Data Element: Unsigned Integer 4 bytes
+                    0000 1... = Data Element Type: Unsigned Integer (1)
+                    .... .010 = Data Element Size: 4 bytes (2)
+                    Data Value
+                        Attribute Range: 0x0000ffff
+                            Attribute Range From: 0x0000
+                            Attribute Range To: 0xffff
+    Continuation State: no (00)
+
+
+=== Response ===
+
+02 2a 20 0e 00 0a 00 40 00 07 00 01 00 05 00 02 35 00 00
+
+Frame 78: 19 bytes on wire (152 bits), 19 bytes captured (152 bits)
+    Encapsulation type: Bluetooth H4 with linux header (99)
+    Arrival Time: Apr  8, 2006 15:28:53.117895000 Mitteleuropäische Sommerzeit
+    [Time shift for this packet: 0.000000000 seconds]
+    Epoch Time: 1144502933.117895000 seconds
+    [Time delta from previous captured frame: 0.000280000 seconds]
+    [Time delta from previous displayed frame: 0.000280000 seconds]
+    [Time since reference or first frame: 146.955738000 seconds]
+    Frame Number: 78
+    Frame Length: 19 bytes (152 bits)
+    Capture Length: 19 bytes (152 bits)
+    [Frame is marked: False]
+    [Frame is ignored: False]
+    Point-to-Point Direction: Sent (0)
+    [Protocols in frame: bluetooth:hci_h4:bthci_acl:btl2cap:btsdp]
+Bluetooth
+    [Source: 00:00:00_00:00:00 (00:00:00:00:00:00)]
+    [Destination: MurataMa_07:2e:fa (00:0e:6d:07:2e:fa)]
+Bluetooth HCI H4
+    [Direction: Sent (0x00)]
+    HCI Packet Type: ACL Data (0x02)
+Bluetooth HCI ACL Packet
+    .... 0000 0010 1010 = Connection Handle: 0x02a
+    ..10 .... .... .... = PB Flag: First Automatically Flushable Packet (2)
+    00.. .... .... .... = BC Flag: Point-To-Point (0)
+    Data Total Length: 14
+    Data
+    [Connect in frame: 52]
+    [Disconnect in frame: 89]
+    [Source BD_ADDR: 00:00:00_00:00:00 (00:00:00:00:00:00)]
+    [Source Device Name: ]
+    [Source Role: Slave (2)]
+    [Destination BD_ADDR: MurataMa_07:2e:fa (00:0e:6d:07:2e:fa)]
+    [Destination Device Name: ]
+    [Destination Role: Master (1)]
+    [Last Role Change in Frame: 47]
+    [Current Mode: Active Mode (0)]
+    [Last Mode Change in Frame: 52]
+Bluetooth L2CAP Protocol
+    Length: 10
+    CID: Dynamically Allocated Channel (0x0040)
+    [Connect in frame: 64]
+    [Disconnect in frame: 83]
+    [PSM: SDP (0x0001)]
+Bluetooth SDP Protocol
+    PDU: Service Search Attribute Response (0x07)
+    Transaction Id: 0x0001
+    Parameter Length: 5
+    Attribute List Byte Count: 2
+    Attribute Lists [count =  0]
+        Data Element: Sequence uint8 0 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .101 = Data Element Size: uint8 (5)
+            Data Element Var Size: 0
+            Data Value: MISSING
+    Continuation State: no (00)
+	
+	
+	
+	
+	
+	
+	
+=== Request 3 ===
+
+030b20180014004100060000000f350319110103f035050a0000ffff00
+
+Frame 318: 29 bytes on wire (232 bits), 29 bytes captured (232 bits)
+    Encapsulation type: Apple Bluetooth PacketLogger (118)
+    Arrival Time: Apr 14, 2055 00:40:28.000000000 Mitteleuropäische Sommerzeit
+    [Time shift for this packet: 0.000000000 seconds]
+    Epoch Time: -1603698468.000000000 seconds
+    [Time delta from previous captured frame: 4.000000000 seconds]
+    [Time delta from previous displayed frame: 4.000000000 seconds]
+    [Time since reference or first frame: 13495.000000000 seconds]
+    Frame Number: 318
+    Frame Length: 29 bytes (232 bits)
+    Capture Length: 29 bytes (232 bits)
+    [Frame is marked: False]
+    [Frame is ignored: False]
+    [Protocols in frame: bluetooth:packetlogger:bthci_acl:btl2cap:btsdp]
+Bluetooth
+    [Source: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+    [Destination: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+PacketLogger Recv ACL Data
+    Type: Recv ACL Data (0x03)
+Bluetooth HCI ACL Packet
+    .... 0000 0000 1011 = Connection Handle: 0x00b
+    ..10 .... .... .... = PB Flag: First Automatically Flushable Packet (2)
+    00.. .... .... .... = BC Flag: Point-To-Point (0)
+    Data Total Length: 24
+    Data
+    [Connect in frame: 259]
+    [Disconnect in frame: 650]
+    [Source BD_ADDR: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+    [Source Device Name: ]
+    [Source Role: Master (1)]
+    [Destination BD_ADDR: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+    [Destination Device Name: SPP Counter 5C:F3:70:7D:0E:96]
+    [Destination Role: Slave (2)]
+    [Last Role Change in Frame: 256]
+    [Current Mode: Active Mode (0)]
+    [Last Mode Change in Frame: 259]
+Bluetooth L2CAP Protocol
+    Length: 20
+    CID: Dynamically Allocated Channel (0x0041)
+    [Connect in frame: 293]
+    [Disconnect in frame: 322]
+    [PSM: SDP (0x0001)]
+Bluetooth SDP Protocol
+    PDU: Service Search Attribute Request (0x06)
+    Transaction Id: 0x0000
+    Parameter Length: 15
+    Service Search Pattern: Serial Port
+        Data Element: Sequence uint8 3 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .101 = Data Element Size: uint8 (5)
+            Data Element Var Size: 3
+            Data Value
+                Data Element: UUID 2 bytes
+                    0001 1... = Data Element Type: UUID (3)
+                    .... .001 = Data Element Size: 2 bytes (1)
+                    Data Value
+                        Value: UUID: Serial Port (0x1101)
+    Maximum Attribute Byte Count: 1008
+    Attribute ID List
+        Data Element: Sequence uint8 5 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .101 = Data Element Size: uint8 (5)
+            Data Element Var Size: 5
+            Data Value
+                Data Element: Unsigned Integer 4 bytes
+                    0000 1... = Data Element Type: Unsigned Integer (1)
+                    .... .010 = Data Element Size: 4 bytes (2)
+                    Data Value
+                        Attribute Range: 0x0000ffff
+                            Attribute Range From: 0x0000
+                            Attribute Range To: 0xffff
+    Continuation State: no (00)
+
+
+=== Response 3 ===
+
+020b006e006a004d000700000065006236005f36005c0900000a0001000109000136000319110109000436000e360003190100360005190003080109000536000319100209000636000909656e09006a090100090009360009360006191101091102090100250b53505020436f756e74657200
+
+0000   02 0b 00 6e 00 6a 00 4d 00 07 00 00 00 65 00 62
+0010   36 00 5f 36 00 5c 09 00 00 0a 00 01 00 01 09 00
+0020   01 36 00 03 19 11 01 09 00 04 36 00 0e 36 00 03
+0030   19 01 00 36 00 05 19 00 03 08 01 09 00 05 36 00
+0040   03 19 10 02 09 00 06 36 00 09 09 65 6e 09 00 6a
+0050   09 01 00 09 00 09 36 00 09 36 00 06 19 11 01 09
+0060   11 02 09 01 00 25 0b 53 50 50 20 43 6f 75 6e 74
+0070   65 72 00
+
+Frame 320: 115 bytes on wire (920 bits), 115 bytes captured (920 bits)
+    Encapsulation type: Apple Bluetooth PacketLogger (118)
+    Arrival Time: Apr 14, 2055 00:40:28.000000000 Mitteleuropäische Sommerzeit
+    [Time shift for this packet: 0.000000000 seconds]
+    Epoch Time: -1603698468.000000000 seconds
+    [Time delta from previous captured frame: 0.000000000 seconds]
+    [Time delta from previous displayed frame: 0.000000000 seconds]
+    [Time since reference or first frame: 13495.000000000 seconds]
+    Frame Number: 320
+    Frame Length: 115 bytes (920 bits)
+    Capture Length: 115 bytes (920 bits)
+    [Frame is marked: False]
+    [Frame is ignored: False]
+    [Protocols in frame: bluetooth:packetlogger:bthci_acl:btl2cap:btsdp]
+Bluetooth
+    [Source: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+    [Destination: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+PacketLogger Sent ACL Data
+    Type: Sent ACL Data (0x02)
+Bluetooth HCI ACL Packet
+    .... 0000 0000 1011 = Connection Handle: 0x00b
+    ..00 .... .... .... = PB Flag: First Non-automatically Flushable Packet (0)
+    00.. .... .... .... = BC Flag: Point-To-Point (0)
+    Data Total Length: 110
+    Data
+    [Connect in frame: 259]
+    [Disconnect in frame: 650]
+    [Source BD_ADDR: Cc&CTech_7d:0e:96 (5c:f3:70:7d:0e:96)]
+    [Source Device Name: SPP Counter 5C:F3:70:7D:0E:96]
+    [Source Role: Slave (2)]
+    [Destination BD_ADDR: 70:5f:a3:0f:8a:ab (70:5f:a3:0f:8a:ab)]
+    [Destination Device Name: ]
+    [Destination Role: Master (1)]
+    [Last Role Change in Frame: 256]
+    [Current Mode: Active Mode (0)]
+    [Last Mode Change in Frame: 259]
+Bluetooth L2CAP Protocol
+    Length: 106
+    CID: Dynamically Allocated Channel (0x004d)
+    [Connect in frame: 293]
+    [Disconnect in frame: 322]
+    [PSM: SDP (0x0001)]
+Bluetooth SDP Protocol
+    PDU: Service Search Attribute Response (0x07)
+    Transaction Id: 0x0000
+    Parameter Length: 101
+    Attribute List Byte Count: 98
+    Attribute Lists [count =  1]
+        Data Element: Sequence uint16 95 bytes
+            0011 0... = Data Element Type: Sequence (6)
+            .... .110 = Data Element Size: uint16 (6)
+            Data Element Var Size: 95
+            Data Value
+                Attribute List [count =  7] (Serial Port)
+                    Data Element: Sequence uint16 92 bytes
+                        0011 0... = Data Element Type: Sequence (6)
+                        .... .110 = Data Element Size: uint16 (6)
+                        Data Element Var Size: 92
+                        Data Value
+                            Service Attribute: Service Record Handle (0x0), value = 0x00010001 (65537)
+                                Attribute ID: Service Record Handle
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Service Record Handle (0x0000)
+                                Value
+                                    Data Element: Unsigned Integer 4 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .010 = Data Element Size: 4 bytes (2)
+                                        Data Value
+                                            Service Record Handle: 0x00010001
+                            Service Attribute: Service Class ID List (0x1), value = Serial Port
+                                Attribute ID: Service Class ID List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Service Class ID List (0x0001)
+                                Value
+                                    Data Element: Sequence uint16 3 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 3
+                                        Data Value
+                                            Data Element: UUID 2 bytes
+                                                0001 1... = Data Element Type: UUID (3)
+                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                Data Value
+                                                    Value: UUID: Serial Port (0x1101)
+                            Service Attribute: Protocol Descriptor List (0x4), value = L2CAP -> RFCOMM -> Unknown
+                                Attribute ID: Protocol Descriptor List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Protocol Descriptor List (0x0004)
+                                Value
+                                    Data Element: Sequence uint16 14 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 14
+                                        Data Value
+                                            Protocol #1: L2CAP
+                                                Data Element: Sequence uint16 3 bytes
+                                                    0011 0... = Data Element Type: Sequence (6)
+                                                    .... .110 = Data Element Size: uint16 (6)
+                                                    Data Element Var Size: 3
+                                                    Data Value
+                                                        Protocol Entry: L2CAP
+                                                            Data Element: UUID 2 bytes
+                                                                0001 1... = Data Element Type: UUID (3)
+                                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                                Data Value
+                                                                    Value: UUID: L2CAP (0x0100)
+                                            Protocol #2: RFCOMM
+                                                Data Element: Sequence uint16 5 bytes
+                                                    0011 0... = Data Element Type: Sequence (6)
+                                                    .... .110 = Data Element Size: uint16 (6)
+                                                    Data Element Var Size: 5
+                                                    Data Value
+                                                        Protocol Entry: RFCOMM
+                                                            Data Element: UUID 2 bytes
+                                                                0001 1... = Data Element Type: UUID (3)
+                                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                                Data Value
+                                                                    Value: UUID: RFCOMM (0x0003)
+                                            Protocol #3: Unknown
+                                                Data Element: Unsigned Integer 1 byte (0 bytes if Nil)
+                                                    0000 1... = Data Element Type: Unsigned Integer (1)
+                                                    .... .000 = Data Element Size: 1 byte (0 bytes if Nil) (0)
+                                                    Data Value
+                                                        Protocol Entry: Unknown
+                                                            Data Element: Nil 2 bytes
+                                                                0000 0... = Data Element Type: Nil (0)
+                                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                                Data Value
+                                                                    Value: UUID: Unknown (0x0900)
+                            Service Attribute: Browse Group List (0x5), value = Public Browse Group
+                                Attribute ID: Browse Group List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Browse Group List (0x0005)
+                                Value
+                                    Data Element: Sequence uint16 3 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 3
+                                        Data Value
+                                            Data Element: UUID 2 bytes
+                                                0001 1... = Data Element Type: UUID (3)
+                                                .... .001 = Data Element Size: 2 bytes (1)
+                                                Data Value
+                                                    Value: UUID: Public Browse Group (0x1002)
+                            Service Attribute: Language Base Attribute ID List (0x6), value = (Lang: en, Encoding: UTF-8, Attribute Base: 0x0100)
+                                Attribute ID: Language Base Attribute ID List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Language Base Attribute ID List (0x0006)
+                                Value
+                                    Data Element: Sequence uint16 9 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 9
+                                        Data Value
+                                            Language #1: Lang: en, Encoding: UTF-8, Attribute Base: 0x0100
+                                                Data Element: Unsigned Integer 2 bytes
+                                                    0000 1... = Data Element Type: Unsigned Integer (1)
+                                                    .... .001 = Data Element Size: 2 bytes (1)
+                                                    Data Value
+                                                        Language Code: en
+                                                Data Element: Unsigned Integer 2 bytes
+                                                    0000 1... = Data Element Type: Unsigned Integer (1)
+                                                    .... .001 = Data Element Size: 2 bytes (1)
+                                                    Data Value
+                                                        Language Encoding: UTF-8 (106)
+                                                Data Element: Unsigned Integer 2 bytes
+                                                    0000 1... = Data Element Type: Unsigned Integer (1)
+                                                    .... .001 = Data Element Size: 2 bytes (1)
+                                                    Data Value
+                                                        Attribute Base: 0x0100
+                            Service Attribute: Bluetooth Profile Descriptor List (0x9), value = Serial Port 11.2
+                                Attribute ID: Bluetooth Profile Descriptor List
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Bluetooth Profile Descriptor List (0x0009)
+                                Value
+                                    Data Element: Sequence uint16 9 bytes
+                                        0011 0... = Data Element Type: Sequence (6)
+                                        .... .110 = Data Element Size: uint16 (6)
+                                        Data Element Var Size: 9
+                                        Data Value
+                                            Data Element: Sequence uint16 6 bytes
+                                                0011 0... = Data Element Type: Sequence (6)
+                                                .... .110 = Data Element Size: uint16 (6)
+                                                Data Element Var Size: 6
+                                                Data Value
+                                                    Profile Descriptor List #1: Serial Port, Version 11.2
+                                                        Data Element: UUID 2 bytes
+                                                            0001 1... = Data Element Type: UUID (3)
+                                                            .... .001 = Data Element Size: 2 bytes (1)
+                                                            Data Value
+                                                                Value: UUID: Serial Port (0x1101)
+                                                        Data Element: Unsigned Integer 2 bytes
+                                                            0000 1... = Data Element Type: Unsigned Integer (1)
+                                                            .... .001 = Data Element Size: 2 bytes (1)
+                                                            Data Value
+                                                                Protocol Version: 0x1102
+                            Service Attribute: Service Name (0x100), value = SPP Counter
+                                Attribute ID: Service Name
+                                    Data Element: Unsigned Integer 2 bytes
+                                        0000 1... = Data Element Type: Unsigned Integer (1)
+                                        .... .001 = Data Element Size: 2 bytes (1)
+                                        Data Value
+                                            Attribute ID: Service Name (0x0100)
+                                Value
+                                    Data Element: Text string uint8 11 bytes
+                                        0010 0... = Data Element Type: Text string (4)
+                                        .... .101 = Data Element Size: uint8 (5)
+                                        Data Element Var Size: 11
+                                        Data Value
+                                            Service Name: SPP Counter
+    Continuation State: no (00)
+

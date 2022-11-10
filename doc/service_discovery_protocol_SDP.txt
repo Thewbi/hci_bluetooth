@@ -187,7 +187,7 @@ index = index + 1 + currentDataElement->dataElementVarSizeInBytes
 
 All bytes wrapped inside a L2CAP packet of PSM 0x0001 (= SDP) is part of an SDP request or response.
 
-The SDP packet has the following structure
+The SDP request frame has the following structure:
 
 PDU - (1 Byte) 
 	0x06 == Service Search Attribute Request
@@ -197,6 +197,106 @@ Data Element - (Variable Amount of Bytes) - Service Search Pattern
 Maximum Attribute Count - (2 Byte) - No more than "Maximum Attribute Count" attributes should be returned
 Data Element - (Variable Amount of Bytes) - Attribute ID List
 Continuation State - (1 Byte)
+
+1. When a L2CAP message with PSM PSM 0x0001 (= SDP), forward the following payload to the SDP service
+2. The SDP service checks the PDU field for 0x06 == Service Search Attribute Request 
+3. If 0x06 found, SDPService will parse all parts of the request
+4. If the Service Search Pattern is for "Serial Port" (UUID: Serial Port (0x1101))
+   the SDPService will answer with === Response 3 === (siehe unten)
+   
+Basically the SDPService will return a so called ServiceRecord in the form on nested DataElements.
+
+The ServiceRecord will be a description of a RFCOMM service since this RFCOMM service matches
+the SerialPort description in the request.
+
+A ServiceRecord has several Service Attributes.
+A ServiceRecord is a list of Service Attributes.
+
+The ServiceRecord for Serial per RFCOMM has the following Service Attributes:
+- Service Attribute: Service Record Handle (0x0), value = 0x00010001 (65537)
+- Service Attribute: Service Class ID List (0x1), value = Serial Port
+- Service Attribute: Protocol Descriptor List (0x4), value = L2CAP -> RFCOMM -> Unknown
+	The Protocol Descriptor List lists protocols
+		- Protocol #1: L2CAP
+		- Protocol #2: RFCOMM
+		- Protocol #3: Unknown
+- Service Attribute: Browse Group List (0x5), value = Public Browse Group
+- Service Attribute: Language Base Attribute ID List (0x6), value = (Lang: en, Encoding: UTF-8, Attribute Base: 0x0100)
+- Service Attribute: Bluetooth Profile Descriptor List (0x9), value = Serial Port 11.2
+- Service Attribute: Service Name (0x100), value = SPP Counter
+
+
+=== Service Records Handle ===
+
+A service record handle is a 32-bit number that shall uniquely identify each ser-
+vice record within an SDP server. It is important to note that, in general, each 
+handle is unique only within each SDP server. There is no fixed list of
+well known ServiceRecordHandles. The handles inside a SDP server may be choosen randomly.
+
+
+=== Service Attributes ===
+
+A Service Record is a list of ServiceAttributes.
+Some ServiceAttributes have ids which are well-known.
+If any services uses a well-known ServiceAttribute id, it has to belong to that specific Universal Attribute.
+Well-known ids are not allowed to be mapped to other attributes.
+
+A Service does not have to use all Universal Attributes.
+
+This is the list of Universal Attributes:
+
+Attribute Name        	Attribute ID 	Attribute Value Type			Description
+
+ServiceRecordHandle   	0x0000          32-bit unsigned integer			A service record handle is a 32-bit number that uniquely identifies each service 
+																		record within an SDP server. 
+																	
+ServiceClassIDList    	0x0001 			Data Element Sequence 			The ServiceClassIDList attribute consists of a data element sequence in which each 
+																		data element is a UUID representing the service classes that a given service record 
+																		conforms to.
+																	
+ServiceRecordState 		0x0002 			32-bit unsigned integer			The ServiceRecordState is a 32-bit integer that is used to facilitate caching of 
+																		Service Attributes. If this attribute is contained in a service record, its value 
+																		shall bechanged when any other attribute value is added to, deleted from or 
+																		changed within the service record. This permits a client to check the value of 
+																		this single attribute. If its value has not changed since it was last checked, the 
+																		client knows that no other attribute values within the service record have 
+																		changed.
+																	
+ServiceID 				0x0003 			UUID							The ServiceID is a UUID that universally and uniquely identifies the service 
+																		instance described by the service record. This service attribute is particularly 
+																		useful if the same service is described by service records in more than one 
+																		SDP server.
+																	
+ProtocolDescriptorList 	0x0004 			Data Element Sequence or Data 	The ProtocolDescriptorList attribute describes one or more protocol stacks that 
+										Element Alternative				can be used to gain access to the service described by the service record.
+										
+AdditionalProtocol		0x000D 			Data Element Sequence
+DescriptorList 
+
+BrowseGroupList 		0x0005 			Data Element Sequence			The BrowseGroupList attribute consists of a data element sequence in which 
+																		each element is a UUID that represents a browse group to which the service 
+																		record belongs.
+																		
+LanguageBase			0x0006 			Data Element Sequence			In order to support human-readable attributes for multiple natural languages in 
+AttributeIDList															a single service record, a base attribute ID is assigned for each of the natural 
+																		languages used in a service record.
+																		
+ServiceInfoTimeToLive 	0x0007 			32-bit unsigned integer			The ServiceTimeToLive attribute is a 32-bit integer that contains the number of 
+																		seconds for which the information in a service record is expected to remain 
+																		valid and unchanged.
+																		
+ServiceAvailability 			0x0008 	8-bit unsigned integer
+
+BluetoothProfileDescriptorList 0x0009 	Data Element Sequence           The BluetoothProfileDescriptorList attribute consists of a data element 
+																		sequence in which each element is a profile descriptor that contains informa-
+																		tion about a Bluetooth profile to which the service represented by this service 
+																		record conforms. Each profile descriptor is a data element sequence whose 
+																		first element is the UUID assigned to the profile and whose second element is 
+																		a 16-bit profile version number.
+ 																	
+ServiceName 			0x0000 			String										
+
+page 214 of 656
 
 
 == Parsing an SDP request ==

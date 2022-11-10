@@ -261,3 +261,233 @@ void dumpDataElement(const DataElement* data_element, const uint8_t indent_count
 
 	std::cout << temp_indent_string << "}" << std::endl;
 }
+
+uint8_t type_to_code(DataElementType type) 
+{
+	switch (type)
+	{
+	case DataElementType::uint:
+		return 1;
+
+	case DataElementType::twos_complement_int:
+		return 2;
+
+	case DataElementType::uuid:
+		return 3;
+
+	case DataElementType::text_string:
+		return 4;
+
+	case DataElementType::boolean:
+		return 5;
+
+	case DataElementType::sequence:
+		return 6;
+
+	case DataElementType::alternative:
+		return 7;
+
+	case DataElementType::url:
+		return 8;
+
+	default:
+		throw 1;
+	}
+}
+
+uint8_t serializeDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index)
+{
+	uint8_t bytes_created = 0;
+
+	// type descriptor
+	uint8_t type_descriptor = type_to_code(data_element.type);
+
+	// size descriptor
+	uint8_t size_descriptor = 0;
+	uint8_t max = 0;
+	switch (data_element.type)
+	{
+	case DataElementType::uint:
+	{
+		switch (data_element.dataElementVarSizeInBytes)
+		{
+		case 1:
+			size_descriptor = 0;
+			max = 1;
+			break;
+
+		case 2:
+			size_descriptor = 1;
+			max = 2;
+			break;
+
+		case 4:
+			size_descriptor = 2;
+			max = 4;
+			break;
+
+		case 8:
+			throw 8; // how to convert a uint32 into a 8 byte?
+			/*size_descriptor = 3;
+			max = 8;
+			break;*/
+
+		case 16:
+			throw 16; // how to convert a uint32 into a 16 byte?
+			/*size_descriptor = 4;
+			max = 16;
+			break;*/
+
+		default:
+			throw 2;
+		}		
+	}
+	break;
+
+	case DataElementType::uuid:
+	{
+		switch (data_element.dataElementVarSizeInBytes)
+		{
+		case 1:
+			size_descriptor = 0;
+			max = 1;
+			break;
+
+		case 2:
+			size_descriptor = 1;
+			max = 2;
+			break;
+
+		case 4:
+			size_descriptor = 2;
+			max = 4;
+			break;
+
+		default:
+			throw 3;
+		}
+	}
+	break;
+
+	case DataElementType::text_string:
+	{
+		size_descriptor = 5;
+		max = data_element.value_text.size();
+	}
+	break;
+
+	case DataElementType::sequence:
+	{
+		// for whatever reason, some stacks use 2 byte even if one byte would suffice
+		/*if (data_element.dataElementVarSizeInBytes <= 0xFF)
+		{
+			size_descriptor = 5;
+		} 
+		else*/ if (data_element.dataElementVarSizeInBytes <= 0xFFFF)
+		{
+			size_descriptor = 6;
+
+			// type and size descriptor (1 Byte) + 2 byte length variable
+			//max = 1 + 2;
+			max = 2;
+		}
+		else if (data_element.dataElementVarSizeInBytes <= 0xFFFFFF)
+		{
+			size_descriptor = 7;
+
+			// type and size descriptor (1 Byte) + 3 byte length variable
+			//max = 1 + 3;
+			max = 3;
+		}
+		else
+		{
+			throw 1;
+		}
+		
+		//max = data_element.dataElementVarSizeInBytes;
+		
+	}
+	break;
+
+	default:
+		throw 1;
+	}
+
+	target.at(start_index) = ((type_descriptor & 0x1F) << 3) + (size_descriptor & 0x07);
+	bytes_created++;
+
+	switch (data_element.type)
+	{
+	case DataElementType::uint:
+		// value
+		for (int i = max; i > 0; i--)
+		{
+			target.at(start_index + bytes_created + i - 1) = data_element.value_uint32 >> (8 * (max - i));
+		}
+		break;
+
+	case DataElementType::uuid:
+		// value
+		for (int i = max; i > 0; i--)
+		{
+			target.at(start_index + bytes_created + i - 1) = data_element.value_uuid >> (8 * (max - i));
+		}
+		break;
+
+	case DataElementType::text_string:
+		target.at(start_index + 1) = data_element.value_text.size();
+		bytes_created++;
+
+		std::copy(data_element.value_text.begin(), data_element.value_text.end(), target.data() + start_index  + 2);
+		break;
+
+	case DataElementType::sequence:
+		// write the size variable after the type descriptor and the size descriptor
+		for (int i = (size_descriptor-4); i > 0; i--)
+		{
+			target.at(start_index + bytes_created + i - 1) = data_element.dataElementVarSizeInBytes >> (8 * (max - i));
+			//bytes_created++;
+		}
+
+		//std::copy(data_element.value_text.begin(), data_element.value_text.end(), target.data() + start_index + 2);
+		break;
+
+	default: 
+		throw 1;
+	}
+	
+	bytes_created += max;
+
+	return bytes_created;
+}
+
+uint8_t serializeSequenceDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index)
+{
+	auto bytes_created = 0;
+	std::deque<DataElement> deque;
+
+	uint8_t temp_start_index = start_index;
+
+	deque.push_back(data_element);
+
+	while (!deque.empty())
+	{ 
+		DataElement current_data_element = deque.front();
+		temp_start_index += serializeDataElement(target, current_data_element, temp_start_index);
+		deque.pop_front();
+
+		if (current_data_element.type == DataElementType::sequence)
+		{
+			// insert the children into the queue at the front if there are any
+			//for (auto child : current_data_element.children)
+			std::vector<DataElement*>::reverse_iterator it = current_data_element.children.rbegin();
+			while (it != current_data_element.children.rend())
+			{
+				deque.push_front(**it);
+				it++;
+			}
+		}
+	}
+
+	return temp_start_index;
+}

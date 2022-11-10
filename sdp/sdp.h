@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <array>
+#include <deque>
 
 #include <math.h>
 
@@ -60,8 +62,25 @@ public:
 	std::vector<DataElement*> children;
 };
 
+/**
+ * data - 
+ * index -
+ * data_element -
+ */
 uint8_t readDataElementHeader(const uint8_t* data, uint8_t index, DataElement* data_element);
+
+/**
+ * data -
+ * index -
+ * data_element -
+ */
 uint8_t readDataElementBody(const uint8_t* data, uint8_t index, DataElement** data_element);
+
+/**
+ * data -
+ * start_index -
+ * current_data_element -
+ */
 uint8_t processSDPData(const uint8_t* data, const uint8_t start_index, DataElement* current_data_element);
 
 /**
@@ -70,3 +89,9 @@ uint8_t processSDPData(const uint8_t* data, const uint8_t start_index, DataEleme
  * indent_string - the type of indentation pattern.
  */
 void dumpDataElement(const DataElement* data_element, const uint8_t indent_count, const std::string indent_string);
+
+uint8_t serializeDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index);
+
+uint8_t serializeSequenceDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index);
+
+uint8_t type_to_code(DataElementType type);

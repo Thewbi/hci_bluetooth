@@ -15,6 +15,8 @@
 #include "pklg.h"
 #include <intrin.h>
 
+#include "sdp.h"
+
 bool authentication_request = false;
 bool mtu_config_request_received = false;
 uint8_t mtu_config_request_command_identifier = 0x00;
@@ -193,20 +195,20 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 	}
 
 	int num_interfaces = config_descriptor->bNumInterfaces;
-	printf("active configuration has %u interfaces\n", num_interfaces);
+//	printf("active configuration has %u interfaces\n", num_interfaces);
 
 	int i;
 	for (i = 0; i < num_interfaces; i++)
 	{
 		const struct libusb_interface *interface = &config_descriptor->interface[i];
 		const struct libusb_interface_descriptor * interface_descriptor = interface->altsetting;
-		printf("interface %u: %u endpoints\n", i, interface_descriptor->bNumEndpoints);
+//		printf("interface %u: %u endpoints\n", i, interface_descriptor->bNumEndpoints);
 
 		const struct libusb_endpoint_descriptor *endpoint = interface_descriptor->endpoint;
 
 		for (r = 0; r < interface_descriptor->bNumEndpoints; r++, endpoint++)
 		{
-			printf("- endpoint %x, attributes %x\n", endpoint->bEndpointAddress, endpoint->bmAttributes);
+//			printf("- endpoint %x, attributes %x\n", endpoint->bEndpointAddress, endpoint->bmAttributes);
 
 			switch (endpoint->bmAttributes & 0x03)
 			{
@@ -215,7 +217,7 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 					continue;
 				}
 				event_in_addr = endpoint->bEndpointAddress;
-				printf("-> using 0x%2.2X for HCI Events\n", event_in_addr);
+//				printf("-> using 0x%2.2X for HCI Events\n", event_in_addr);
 				break;
 
 			case LIBUSB_TRANSFER_TYPE_BULK:
@@ -225,12 +227,12 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 						continue;
 					}
 					acl_in_addr = endpoint->bEndpointAddress;
-					printf("-> using 0x%2.2X for ACL Data In\n", acl_in_addr);
+//					printf("-> using 0x%2.2X for ACL Data In\n", acl_in_addr);
 				}
 				else {
 					if (acl_out_addr) continue;
 					acl_out_addr = endpoint->bEndpointAddress;
-					printf("-> using 0x%2.2X for ACL Data Out\n", acl_out_addr);
+//					printf("-> using 0x%2.2X for ACL Data Out\n", acl_out_addr);
 				}
 				break;
 
@@ -238,17 +240,17 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 				if (endpoint->bEndpointAddress & 0x80) {
 					if (sco_in_addr) continue;
 					sco_in_addr = endpoint->bEndpointAddress;
-					printf("-> using 0x%2.2X for SCO Data In\n", sco_in_addr);
+//					printf("-> using 0x%2.2X for SCO Data In\n", sco_in_addr);
 				}
 				else {
 					if (sco_out_addr) continue;
 					sco_out_addr = endpoint->bEndpointAddress;
-					printf("-> using 0x%2.2X for SCO Data Out\n", sco_out_addr);
+//					printf("-> using 0x%2.2X for SCO Data Out\n", sco_out_addr);
 				}
 				break;
 
 			default:
-				printf("Unknown interface");
+//				printf("Unknown interface");
 				break;
 			}
 		}
@@ -424,7 +426,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 	uint8_t idx = 0;
 
 	uint8_t event_code = transfer->buffer[idx++];
-	//printf("event code: 0x%02X\n", event_code);
+	printf("event code: 0x%02X\n", event_code);
 
 	uint8_t parameter_total_length;
 
@@ -492,8 +494,6 @@ void dump_hci_event(struct libusb_transfer* transfer)
 
 	uint8_t completed_packets_0 = 0;
 	uint8_t completed_packets_1 = 0;
-
-	//printf("A\n");
 
 	switch (event_code)
 	{
@@ -614,16 +614,16 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		event_type = transfer->buffer[idx++];
 		address_type = transfer->buffer[idx++];
 
-		// address
-		printf("BD_ADDR\n");
-		for (int i = (idx + 5); i >= idx; --i) {
-			if (i != idx + 5)
-			{
-				printf(":");
-			}
-			fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
-		}
-		printf("\n");
+		//// address
+		//printf("BD_ADDR\n");
+		//for (int i = (idx + 5); i >= idx; --i) {
+		//	if (i != idx + 5)
+		//	{
+		//		printf(":");
+		//	}
+		//	fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
+		//}
+		//printf("\n");
 		break;
 
 	case HCI_EVENT_TRANSFER_COMPLETE:
@@ -758,16 +758,16 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		connection_handle_1 = transfer->buffer[idx++];
 		printf("connection_handle: %02X:%02X\n", connection_handle_1, connection_handle_0);
 
-		// address
-		printf("BD_ADDR\n");
-		for (int i = (idx + 5); i >= idx; --i) {
-			if (i != idx + 5)
-			{
-				printf(":");
-			}
-			fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
-		}
-		printf("\n");
+		//// address
+		//printf("BD_ADDR\n");
+		//for (int i = (idx + 5); i >= idx; --i) {
+		//	if (i != idx + 5)
+		//	{
+		//		printf(":");
+		//	}
+		//	fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
+		//}
+		//printf("\n");
 
 		idx += 6;
 
@@ -776,8 +776,6 @@ void dump_hci_event(struct libusb_transfer* transfer)
 
 		encryption_mode_encryption_disabled = transfer->buffer[idx++];
 		printf("Encryption Mode: Encryption Disabled: %02X\n", encryption_mode_encryption_disabled);
-
-
 
 		//printf("Send Connection Complete event ...\n");
 
@@ -1239,16 +1237,16 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		// parameter total length
 		parameter_total_length = transfer->buffer[idx++];
 
-		// address
-		printf("BD_ADDR of the communication partner that wants to connect: ");
-		for (int i = (idx + 5); i >= idx; --i) {
-			if (i != idx + 5)
-			{
-				printf(":");
-			}
-			fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
-		}
-		printf("\n");
+		//// address
+		//printf("BD_ADDR of the communication partner that wants to connect: ");
+		//for (int i = (idx + 5); i >= idx; --i) {
+		//	if (i != idx + 5)
+		//	{
+		//		printf(":");
+		//	}
+		//	fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
+		//}
+		//printf("\n");
 
 		idx += 6;
 
@@ -1339,9 +1337,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		// Command_Opcode event parameter. See each command’s definition for
 		// the list of return parameters associated with that command.
 
-		printf("A \n");
-
-		if (transfer == NULL) 
+		/*if (transfer == NULL) 
 		{
 			printf("transfer is NULL \n");
 		}
@@ -1350,7 +1346,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 			printf("transfer->length %d \n", transfer->length);
 			printf("transfer->actual_length %d \n", transfer->actual_length);
 			printf("transfer->buffer %d \n", transfer->buffer);
-		}
+		}*/
 
 		// parameter total length
 		printf("accessing buffer ...\n");
@@ -1358,21 +1354,15 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		printf("accessing buffer done.\n");
 		//printf("parameter_total_length: 0x%02x\n", parameter_total_length);
 
-		printf("B\n");
-
 		// number of allowed command packets
 		num_HCI_command_packets = transfer->buffer[idx++];
 		//printf("num_HCI_command_packets: 0x%02x\n", num_HCI_command_packets);
-
-		printf("C\n");
 
 		// command opcode
 		code_lower = transfer->buffer[idx++];
 		code_upper = transfer->buffer[idx++];
 		command_opcode = (code_upper << 8) + code_lower;
 		//printf("command_opcode: 0x%04x\n", command_opcode);
-
-		printf("D\n");
 
 		printf("switch command_opcode\n");
 		switch (command_opcode)
@@ -1841,8 +1831,12 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	unsigned char buffer[2048];
 
 	uint8_t event_code = 0;
+
+	//
+	// Bluetooth HCI ACL Packet
+	//
 	
-	// acl_header
+	// acl_header / connection handle
 	acl_header_lower = transfer->buffer[idx++];
 	acl_header_upper = transfer->buffer[idx++];
 	acl_header = (acl_header_upper << 8) + acl_header_lower;
@@ -1851,11 +1845,15 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	/*connection_handle = (header_byte_2 << 8) + event_code;
 	printf("connection_handle: 0x%04x\n", connection_handle);*/
 
-	// data total length
+	// data total length - Total length of data that follows, starting here
 	data_total_length_lower = transfer->buffer[idx++];
 	data_total_length_upper = transfer->buffer[idx++];
 	data_total_length = (data_total_length_upper << 8) + data_total_length_lower;
 	printf("data_total_length: 0x%04x\n", data_total_length);
+
+	//
+	// Bluetooth L2CAP protocol
+	//
 
 	// wrapped l2cap packet length
 	l2cap_length_lower = transfer->buffer[idx++];
@@ -1863,80 +1861,191 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	l2cap_length = (l2cap_length_upper << 8) + l2cap_length_lower;
 	printf("l2cap_length: 0x%04x\n", l2cap_length);
 
+	// signaling channel 
+	// Can be 0x0001 for all configuration requests
+	// Every participant has to have at least the channel 0x0001 open!
+	// Other channels for other protocols are created on demand
 	l2cap_signaling_channel_lower = transfer->buffer[idx++];
 	l2cap_signaling_channel_upper = transfer->buffer[idx++];
 	l2cap_signaling_channel = (l2cap_signaling_channel_upper << 8) + l2cap_signaling_channel_lower;
 	printf("l2cap_signaling_channel: 0x%04x\n", l2cap_signaling_channel);
 
-	l2cap_command_code = transfer->buffer[idx++];
-	printf("l2cap_command_code: 0x%02x\n", l2cap_command_code);
+	// TODO retrieve the channel object via the destination channel id / l2cap_signaling_channel
+	// Every channel has gotten a PSM during the connection phase, so each channel
+	// knows what protocol will be exchanged over it
+	//
+	// If there is no channel mantained for a channel id, ignore the packet!
 
-	l2cap_command_identifier = transfer->buffer[idx++];
-	printf("l2cap_command_identifier: 0x%02x\n", l2cap_command_identifier);
+	
 
-	l2cap_command_length_lower = transfer->buffer[idx++];
-	l2cap_command_length_upper = transfer->buffer[idx++];
-	l2cap_command_length = (l2cap_command_length_upper << 8) + l2cap_command_length_lower;
-	printf("l2cap_command_length: 0x%04x\n", l2cap_command_length);	
+	if (l2cap_signaling_channel == 0x00cc)
+	{
+		// I do not know why we get 0x00cc message! I never understood!
+	}
+	else if (l2cap_signaling_channel == 0x0041)
+	{
+		// there is no real channel management yet! 
+		// The fake code 0x0041 is for the SDP channel!
 
-	switch (l2cap_command_code) {
+		// The channel knows via it's PSM assigned during connection which
+		// protocol is exchanged over it!
 
-	case 0xCC:
+		// channel 0x0041 is a simulated SDP channel, so perform SDP channel parsing!
+
+		// connection handle: 2 byte
+		// total length: 2 byte
+		// l2cap length: 2 byte
+		// channel ID: 2 byte
+		//uint8_t sdp_start_index = 2 + 2 + 2 + 2;
+		uint8_t sdp_start_index = idx;
+		uint8_t sdp_length = l2cap_length;
+
+		// DEBUG dump packet
+		for (int i = sdp_start_index; i < sdp_start_index + sdp_length; i++)
 		{
-		if (!authentication_request)
-		{
-			authentication_request = true;
-			printf("Starting simple pairing using HCI_Authentication_Requested !\n");
+			std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(transfer->buffer[i] & 0xFF) << " ";
+		}
+		std::cout << std::dec << std::endl << std::endl;
 
-			printf("\n\n\n");
+		// what type of SDP command this request is 
+		uint8_t sdp_pdu = transfer->buffer[idx++];
+		switch (sdp_pdu) {
+
+		case 0x06:
+		{
+			uint16_t sdp_transaction_id = 0x0000;
+
+			sdpServiceSearchAttributeRequest(transfer->buffer, idx, sdp_transaction_id);
+
+			std::array<uint8_t, 256> target = { 0 };
+			auto bytes_created = sdpServiceSearchAttributeResponse(target);
+
+			// DEBUG output hex stream
+			for (int i = 0; i < bytes_created; i++)
+			{
+				std::cout << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(target.at(i)) << " ";
+				if ((i > 0) && ((i + 1) % 16 == 0))
+				{
+					std::cout << std::endl;
+				}
+			}
+			std::cout << std::endl;
 
 			//
-			// HCI command - Send "HCI_Write_Inquiry_Mode" command
+			// Send the response
 			//
 
-			printf(">>> HCI command - Send \"HCI_Write_Inquiry_Mode\" command\n");
-
-			unsigned char buffer[1024];
-			for (int i = 0; i < 1024; ++i) {
+			for (int i = 0; i < 1024; i++) {
 				buffer[i] = 0x00;
 			}
 
-			// 7.1.15  Authentication Requested Command
+			idx = 0;
 
-			int idx = 0;
-			
-			// opcode 
-			buffer[idx++] = 0x11;
-			//buffer[idx++] = 0x0b;
-			buffer[idx++] = 0x00;
+			//
+			// HCI ACL Packet
+			//
 
-			//buffer[idx++] = 0x0b;
-			//buffer[idx++] = 0x11;
+			// ACL header / connection handle
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x20;
 
+			// length_of_sdp_packet is computed from:
+			//
+			// PDU (1 byte)
+			// transaction id (2 byte)
+			// parameter length (2 byte)
+			// attribute list byte count (2 byte)
+			// data element data
+			// continuation state (1 byte)
+			uint16_t length_of_sdp_packet = 1 + 2 + 2 + 2 + bytes_created + 1;
+
+			// data total length (2 Byte)
+			buffer[idx++] = 2 + 2 + length_of_sdp_packet; // here this is the length of the following L2CAP packet
+			buffer[idx++] = 0x00; // TODO
+
+			//
+			// L2CAP Packet
+			//
+
+			// length of SDP packet (2 Byte)			
+			buffer[idx++] = (length_of_sdp_packet >> 0) & 0xFF;
+			buffer[idx++] = (length_of_sdp_packet >> 8) & 0xFF;
+
+			// CID of communication partner (2 byte)
+			buffer[idx++] = l2cap_source_cid_lower;
+			buffer[idx++] = l2cap_source_cid_upper;
+
+			// 
+			// SDP Packet
+			// 
+
+			// PDU aka. command code (1 Byte) - Service Search Attribute Response (0x07)
+			buffer[idx++] = 0x07;
+
+			// transaction id (2 byte)			
+			buffer[idx++] = (sdp_transaction_id >> 8) & 0xFF;
+			buffer[idx++] = (sdp_transaction_id >> 0) & 0xFF;
+
+			// parameter length (2 byte) - amount of ????????????????
+			// Core_V4.0 specification
+			// BLUETOOTH SPECIFICATION Version 4.0 [Vol 3] page 224 of 656
+			// Service Discovery Protocol(SDP) Specification
+			buffer[idx++] = ((bytes_created+3) >> 8) & 0xFF;
+			buffer[idx++] = ((bytes_created+3) >> 0) & 0xFF;
+
+			// attribute list byte count (2 byte) - amount of data bytes in the binary data
+			buffer[idx++] = (bytes_created >> 8) & 0xFF;
+			buffer[idx++] = (bytes_created >> 0) & 0xFF;
+
+			// data
+			for (int i = 0; i < bytes_created; i++)
+			{
+				buffer[idx++] = target.at(i);
+			}
+
+			// continuation state
 			buffer[idx++] = 0x00;
 
 			Sleep(wait);
-			usb_send_cmd_packet(buffer, idx);
+			usb_send_acl_packet(buffer, idx);
 
-			//bool is_sent = true;
-			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
-			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+			// dump the outgoing packet into the .pcap file
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
 
-			submit(transfer);
-
-			//libusb_handle_events(context);
-
-			//file.close();
-			//file.flush();
-		}
+			//submit(transfer);
 		}
 		break;
 
-	case 0x01:
-		printf("l2cap_command_code: command reject!\n");
-		break;
+		default:
+			printf("Unknown Service Discovery Protocol (SDP) Protocol Data Unit (PDU): 0x%02x\n", sdp_pdu);
+			break;
+		}		
+	}
+	else if (l2cap_signaling_channel == 0x0001)
+	{
+		//
+		// L2CAP command data
+		//
 
-	case 0x02:
+		l2cap_command_code = transfer->buffer[idx++];
+		printf("l2cap_command_code: 0x%02x\n", l2cap_command_code);
+
+		l2cap_command_identifier = transfer->buffer[idx++];
+		printf("l2cap_command_identifier: 0x%02x\n", l2cap_command_identifier);
+
+		l2cap_command_length_lower = transfer->buffer[idx++];
+		l2cap_command_length_upper = transfer->buffer[idx++];
+		l2cap_command_length = (l2cap_command_length_upper << 8) + l2cap_command_length_lower;
+		printf("l2cap_command_length: 0x%04x\n", l2cap_command_length);
+
+		switch (l2cap_command_code) {
+
+		case 0x01:
+			printf("l2cap_command_code: command reject!\n");
+			break;
+
+		case 0x02:
 		{
 			printf("l2cap_command_code: connection request\n");
 
@@ -2018,6 +2127,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
 			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
 
+			// do we really need to submit the transfer?
 			submit(transfer);
 
 
@@ -2100,7 +2210,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 		}
 		break;
 
-	case 0x04: // Configure request
+		case 0x04: // Configure request
 		{
 			printf("CONFIGURE REQUEST! 0x04 \n\n\n");
 
@@ -2113,20 +2223,20 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 			// ACL header
 			// 0b 00 - connection handle
 			// 12 00 - data total length
-			
+
 			// L2CAP protocol
 			// 0e 00 - length
 			// 01 00 - signaling channel
-			
+
 			// command
 			// 05 - command code (configure response == 0x05)
 			// 05 - command identifier
 			// 0a 00 - command length
-			
+
 			// 4d 00 - destination channel
 			// 00 00 - reserved + continuation			
 			// 00 00 - success
-			
+
 			// 01 02 00 04 - option
 
 			//unsigned char buffer[1024];
@@ -2276,7 +2386,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 		}
 		break;
 
-	case 0x06: // disconnect request
+		case 0x06: // disconnect request
 		{
 			printf("l2cap_command_code: disconnect request\n");
 
@@ -2285,7 +2395,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 			uint8_t l2cap_destination_cid_lower = transfer->buffer[idx++];
 			uint8_t l2cap_destination_cid_upper = transfer->buffer[idx++];
 			uint8_t l2cap_destination_cid = (l2cap_destination_cid_upper << 8) + l2cap_destination_cid_lower;
-			printf("PSM SDP: 0x%04x\n", l2cap_information_type);
+			printf("PSM SDP (== l2cap_information_type): 0x%04x\n", l2cap_information_type);
 
 			l2cap_source_cid_lower = transfer->buffer[idx++];
 			l2cap_source_cid_upper = transfer->buffer[idx++];
@@ -2357,204 +2467,265 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 		}
 		break;
 
-	case 0x0A:
-		// L2CAP - information request
-		printf("l2cap_command_code: information request ...\n");
-
-		// response
-		// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
-		// 0b 00 10 00 0c 00 01 00 0b 02 08 00 02 00 00 00 80 02 00 00
-
-		// information type
-		l2cap_information_type_lower = transfer->buffer[idx++];
-		l2cap_information_type_upper = transfer->buffer[idx++];
-		l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
-		//printf("PSM SDP: 0x%04x\n", l2cap_information_type);
-		printf("l2cap_information_type: 0x%04x\n", l2cap_information_type);
-
-		if (l2cap_information_type == 0x02) 
+		case 0x0A:
 		{
-			printf("l2cap_command_code: Send a response to the \"configure request - extended features mask\"\n");
+			// L2CAP - information request
+			printf("l2cap_command_code: information request ...\n");
 
-			for (int i = 0; i < 1024; i++) {
-				buffer[i] = 0x00;
-			}
-
-			idx = 0;
-
-			// connection handle
-			buffer[idx++] = 0x0b;
-			buffer[idx++] = 0x00;
-
-			// data total length
-			buffer[idx++] = 0x10;
-			buffer[idx++] = 0x00;
-
-			// L2CAP protocol length
-			buffer[idx++] = 0x0c;
-			buffer[idx++] = 0x00;
-
-			// L2CAP signaling channel
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x00;
-
-			// command code (0x0b = information respone)
-			buffer[idx++] = 0x0b;
-
-			// command identifier (correlation id between request and response)
-			buffer[idx++] = l2cap_command_identifier;
-
-			// command length
-			buffer[idx++] = 0x08;
-			buffer[idx++] = 0x00;
-
-			// information type: (0x0002 = extended feature mask)
-			buffer[idx++] = 0x02;
-			buffer[idx++] = 0x00;
-
-			// result: (0x0000 = success)
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			// features enhRetransmission ??????????????? What!?!
-			//buffer[idx++] = 0xa8;
-			buffer[idx++] = 0x80;
-			buffer[idx++] = 0x02;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			Sleep(wait);
-			usb_send_acl_packet(buffer, idx);
-
-			// write the outgoing packet into the log file
-			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
-			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-			submit(transfer);
-		}
-		else if (l2cap_information_type == 0x03)
-		{
+			// response
 			// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
+			// 0b 00 10 00 0c 00 01 00 0b 02 08 00 02 00 00 00 80 02 00 00
 
-			for (int i = 0; i < 1024; i++) {
-				buffer[i] = 0x00;
-			}
+			// information type
+			l2cap_information_type_lower = transfer->buffer[idx++];
+			l2cap_information_type_upper = transfer->buffer[idx++];
+			l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
+			printf("l2cap_information_type: 0x%04x\n", l2cap_information_type);
 
-			idx = 0;
+			if (l2cap_information_type == 0x02)
+			{
+				printf("l2cap_command_code: Send a response to the \"configure request - extended features mask\"\n");
 
-			// header
-			buffer[idx++] = 0x0b;
-			buffer[idx++] = 0x00;
-
-			// data total length
-			buffer[idx++] = 0x14;
-			buffer[idx++] = 0x00;
-
-			// L2CAP protocol length
-			buffer[idx++] = 0x10;
-			buffer[idx++] = 0x00;
-
-			// L2CAP signaling channel
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x00;
-
-			// command code (0x0b = information respone)
-			buffer[idx++] = 0x0b;
-
-			// command identifier (correlation id between request and response)
-			buffer[idx++] = l2cap_command_identifier;
-
-			// command length
-			buffer[idx++] = 0x0c;
-			buffer[idx++] = 0x00;
-
-			// information type: (0x0003 = fixed channel support)
-			buffer[idx++] = 0x03;
-			buffer[idx++] = 0x00;
-
-			// result: (0x0000 = success)
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			// feartures enhRetransmission ??????????????? What!?!
-			buffer[idx++] = 0x06;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			Sleep(wait);
-			usb_send_acl_packet(buffer, idx);
-
-			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
-			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-			submit(transfer);
-		}
-		//else if (l2cap_information_type == 0x04) 
-		//{
-		//	printf("l2cap_command_code: configure request\n");
-
-		//	// this does not parse as l2cap packet!
-		//	//bool is_sent = false;
-		//	//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
-		//}
-
-		/*
-				  for (int i = 0; i < 1024; i++) {
+				for (int i = 0; i < 1024; i++) {
 					buffer[i] = 0x00;
-				  }
+				}
 
-				  idx = 0;
-				  buffer[idx++] = 0x0b;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x14;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x10;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x01;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x0b;
-				  buffer[idx++] = 0x03;
-				  buffer[idx++] = 0x0c;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x03;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x06;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x00;
-				  buffer[idx++] = 0x00;
+				idx = 0;
 
-				  usleep(wait * 1000);
-				  usb_send_cmd_packet(buffer, idx);
+				// connection handle
+				buffer[idx++] = 0x0b;
+				buffer[idx++] = 0x00;
 
-				  //bool is_sent = false
-				  write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, idx, buffer);
+				// data total length
+				buffer[idx++] = 0x10;
+				buffer[idx++] = 0x00;
 
-				  submit(transfer);
-		*/
+				// L2CAP protocol length
+				buffer[idx++] = 0x0c;
+				buffer[idx++] = 0x00;
+
+				// L2CAP signaling channel
+				buffer[idx++] = 0x01;
+				buffer[idx++] = 0x00;
+
+				// command code (0x0b = information respone)
+				buffer[idx++] = 0x0b;
+
+				// command identifier (correlation id between request and response)
+				buffer[idx++] = l2cap_command_identifier;
+
+				// command length
+				buffer[idx++] = 0x08;
+				buffer[idx++] = 0x00;
+
+				// information type: (0x0002 = extended feature mask)
+				buffer[idx++] = 0x02;
+				buffer[idx++] = 0x00;
+
+				// result: (0x0000 = success)
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+
+				// features enhRetransmission ??????????????? What!?!
+				//buffer[idx++] = 0xa8;
+				buffer[idx++] = 0x80;
+				buffer[idx++] = 0x02;
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+
+				Sleep(wait);
+				usb_send_acl_packet(buffer, idx);
+
+				// write the outgoing packet into the log file
+				//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+				write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+				submit(transfer);
+			}
+			else if (l2cap_information_type == 0x03)
+			{
+				// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
+
+				for (int i = 0; i < 1024; i++) {
+					buffer[i] = 0x00;
+				}
+
+				idx = 0;
+
+				// header
+				buffer[idx++] = 0x0b;
+				buffer[idx++] = 0x00;
+
+				// data total length
+				buffer[idx++] = 0x14;
+				buffer[idx++] = 0x00;
+
+				// L2CAP protocol length
+				buffer[idx++] = 0x10;
+				buffer[idx++] = 0x00;
+
+				// L2CAP signaling channel
+				buffer[idx++] = 0x01;
+				buffer[idx++] = 0x00;
+
+				// command code (0x0b = information respone)
+				buffer[idx++] = 0x0b;
+
+				// command identifier (correlation id between request and response)
+				buffer[idx++] = l2cap_command_identifier;
+
+				// command length
+				buffer[idx++] = 0x0c;
+				buffer[idx++] = 0x00;
+
+				// information type: (0x0003 = fixed channel support)
+				buffer[idx++] = 0x03;
+				buffer[idx++] = 0x00;
+
+				// result: (0x0000 = success)
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+
+				// feartures enhRetransmission ??????????????? What!?!
+				buffer[idx++] = 0x06;
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+				buffer[idx++] = 0x00;
+
+				Sleep(wait);
+				usb_send_acl_packet(buffer, idx);
+
+				//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+				write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+				submit(transfer);
+			}
+			//else if (l2cap_information_type == 0x04) 
+			//{
+			//	printf("l2cap_command_code: configure request\n");
+
+			//	// this does not parse as l2cap packet!
+			//	//bool is_sent = false;
+			//	//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+			//}
+
+			/*
+					  for (int i = 0; i < 1024; i++) {
+						buffer[i] = 0x00;
+					  }
+
+					  idx = 0;
+					  buffer[idx++] = 0x0b;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x14;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x10;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x01;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x0b;
+					  buffer[idx++] = 0x03;
+					  buffer[idx++] = 0x0c;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x03;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x06;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x00;
+					  buffer[idx++] = 0x00;
+
+					  usleep(wait * 1000);
+					  usb_send_cmd_packet(buffer, idx);
+
+					  //bool is_sent = false
+					  write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, idx, buffer);
+
+					  submit(transfer);
+			*/
+		}
 		break;
 
-	default:
-		printf("l2cap_command_code: UNKNOWN (0x%02x)\n", l2cap_command_code);
-
-		// this does not parse as l2cap packet!
-		//bool is_sent = false;
-		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
-
+		case 0x0B:
+		{
+			// L2CAP - information response
+			printf("l2cap_command_code: information response ...\n");
+		}
 		break;
+
+		case 0xCC:
+		{
+			if (!authentication_request)
+			{
+				authentication_request = true;
+				printf("Starting simple pairing using HCI_Authentication_Requested !\n");
+
+				printf("\n\n\n");
+
+				//
+				// HCI command - Send "HCI_Write_Inquiry_Mode" command
+				//
+
+				printf(">>> HCI command - Send \"HCI_Write_Inquiry_Mode\" command\n");
+
+				unsigned char buffer[1024];
+				for (int i = 0; i < 1024; ++i) {
+					buffer[i] = 0x00;
+				}
+
+				// 7.1.15  Authentication Requested Command
+
+				int idx = 0;
+
+				// opcode 
+				buffer[idx++] = 0x11;
+				//buffer[idx++] = 0x0b;
+				buffer[idx++] = 0x00;
+
+				//buffer[idx++] = 0x0b;
+				//buffer[idx++] = 0x11;
+
+				buffer[idx++] = 0x00;
+
+				Sleep(wait);
+				usb_send_cmd_packet(buffer, idx);
+
+				//bool is_sent = true;
+				//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+				write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+				submit(transfer);
+
+				//libusb_handle_events(context);
+
+				//file.close();
+				//file.flush();
+			}
+		}
+		break;
+
+		default:
+			printf("l2cap_command_code: UNKNOWN (0x%02x)\n", l2cap_command_code);
+
+			// this does not parse as l2cap packet!
+			//bool is_sent = false;
+			//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+
+			break;
+
+		}
 
 	}
-
+	
 	/*if (transfer_completed == 51) {
 		printf("Closing file\n");
 		file.flush();
@@ -4776,272 +4947,273 @@ static uint8_t find_dev(libusb_device **devs)
 	printf("end find_dev()\n");
 }
 
-//int main()
-//{
-//    std::cout << "Hello HCI test!" << std::endl;
-//
-//	/*
-//
-//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
-//
-//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
-//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
-//
-//	std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_dump.pklg";
-//
-//	std::fstream file(filename, std::ios::in | std::ios::binary);
-//	if (!file.is_open())
-//	{
-//		std::cout << "Could not open " << filename << std::endl;
-//
-//		return 0;
-//	}
-//
-//	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pklg";
-//	std::fstream file_copy;
-//	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
-//	if (!file_copy.is_open())
-//	{
-//		std::cout << "Could not open " << filename_copy << std::endl;
-//
-//		return 0;
-//	}
-//
-//	std::cout << std::endl;
-//	while (!file.eof())
-//	{
-//		if (packetlogger_read_packet(file, [&file_copy](packetlogger_header_t& header, uint8_t hci_packet_type, char* data) -> void {
-//			
-//			// if string type, output a string
-//			if (hci_packet_type >= 0xFB) 
-//			{
-//				std::string s(data, (header.len - 9));
-//				std::cout << s << std::endl;
-//			}
-//
-//			// DEBUG dump packet
-//			for (int i = 0; i < header.len - 9; i++)
-//			{
-//				std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data[i] & 0xFF) << " ";
-//			}
-//			std::cout << std::dec << std::endl << std::endl;
-//
-//			if (hci_packet_type < 0xFB) 
-//			{
-//				// header = length + timestamp
-//				file_copy.write(reinterpret_cast<char *>(&header.len), sizeof(header.len));
-//				file_copy.write(reinterpret_cast<char *>(&header.ts), sizeof(header.ts));
-//
-//				// hci packet type
-//				file_copy.write(reinterpret_cast<char *>(&hci_packet_type), sizeof(hci_packet_type));
-//
-//				// data
-//				for (int i = 0; i < (header.len - 9); i++)
-//				{
-//					uint8_t d = data[i];
-//					file_copy.write(reinterpret_cast<char *>(&d), sizeof(d));
-//				}
-//			}
-//		}))
-//		{
-//			std::cout << "Not an Apple (Bluetooth) packetlogger file! " << filename << std::endl;
-//
-//			file.flush();
-//			file.close();
-//
-//			return -1;
-//		}
-//	}
-//
-//	file.flush();
-//	file.close();
-//
-//	return 0;
-//	*/
-//
-//	/*file_copy.flush();
-//	file_copy.close();*/
-//
-//	/*
-//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
-//
-//	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
-//	std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
-//
-//	std::fstream file(filename, std::ios::in | std::ios::binary);
-//	if (!file.is_open())
-//	{
-//		std::cout << "Could not open " << filename << std::endl;
-//
-//		return 0;
-//	}
-//
-//	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pcap";
-//	std::fstream file_copy;
-//	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
-//	if (!file_copy.is_open())
-//	{
-//		std::cout << "Could not open " << filename_copy << std::endl;
-//
-//		return 0;
-//	}
-//
-//	pcap_hdr_t pcap_hdr;
-//	reset_pcap_hdr_t(pcap_hdr);
-//
-//	// magic_number: used to detect the file format itself and the byte ordering.
-//	// The writing application writes 0xa1b2c3d4 with it's native byte ordering 
-//	// format into this field. The reading application will read either 0xa1b2c3d4 
-//	// (identical) or 0xd4c3b2a1 (swapped). If the reading application reads the 
-//	// swapped 0xd4c3b2a1 value, it knows that all the following fields will have to be swapped too.
-//	file.read(reinterpret_cast<char *>(&pcap_hdr.magic_number), sizeof(pcap_hdr.magic_number));
-//	if (pcap_hdr.magic_number != 2712847316U)
-//	{
-//		std::cout << "Not a pcap file! " << filename << std::endl;
-//		file.close();
-//
-//		return 0;
-//	}
-//
-//	// version_major, version_minor: the version number of this file format (current version is 2.4)
-//	file.read(reinterpret_cast<char *>(&pcap_hdr.version_major), sizeof(pcap_hdr.version_major));
-//	file.read(reinterpret_cast<char *>(&pcap_hdr.version_minor), sizeof(pcap_hdr.version_minor));
-//
-//	// thiszone: the correction time in seconds between GMT (UTC) and the local timezone of
-//	// the following packet header timestamps. Examples: If the timestamps are in GMT (UTC),
-//	// thiszone is simply 0. If the timestamps are in Central European time (Amsterdam, Berlin, …) 
-//	// which is GMT + 1:00, thiszone must be -3600. In practice, time stamps are always in GMT, 
-//	// so thiszone is always 0.
-//	file.read(reinterpret_cast<char *>(&pcap_hdr.thiszone), sizeof(pcap_hdr.thiszone));
-//
-//	// sigfigs: in theory, the accuracy of time stamps in the capture; in practice, all tools set it to 0
-//	file.read(reinterpret_cast<char *>(&pcap_hdr.sigfigs), sizeof(pcap_hdr.sigfigs));
-//
-//	// snaplen: the "snapshot length" for the capture (typically 65535 or even more, 
-//	// but might be limited by the user), see: incl_len vs. orig_len below
-//	file.read(reinterpret_cast<char *>(&pcap_hdr.snaplen), sizeof(pcap_hdr.snaplen));
-//
-//	// network: link - layer header type, specifying the type of headers at the beginning of 
-//	// the packet(e.g. 1 for Ethernet, see tcpdump.org's link-layer header types page for details); 
-//	// this can be various types such as 802.11, 802.11 with various radio information, PPP, 
-//	// Token Ring, FDDI, etc.
-//	file.read(reinterpret_cast<char *>(&pcap_hdr.network), sizeof(pcap_hdr.network));
-//
-//	// write copy header
-//	pcap_hdr_t pcap_hdr_copy;
-//	reset_pcap_hdr_t(pcap_hdr_copy);
-//
-//	pcap_hdr_copy.magic_number = 0xa1b2c3d4;
-//	pcap_hdr_copy.version_major = 0x02;
-//	pcap_hdr_copy.version_minor = 0x04;
-//	pcap_hdr_copy.thiszone = 0x00;
-//	pcap_hdr_copy.sigfigs = 0x00;
-//	pcap_hdr_copy.snaplen = pcap_hdr.snaplen;//0xFFFF;
-//	pcap_hdr_copy.network = 201; //0x01;
-//
-//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.magic_number), sizeof(pcap_hdr_copy.magic_number));
-//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_major), sizeof(pcap_hdr_copy.version_major));
-//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_minor), sizeof(pcap_hdr_copy.version_minor));
-//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.thiszone), sizeof(pcap_hdr_copy.thiszone));
-//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.sigfigs), sizeof(pcap_hdr_copy.sigfigs));
-//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.snaplen), sizeof(pcap_hdr_copy.snaplen));
-//	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.network), sizeof(pcap_hdr_copy.network));
-//
-//	std::cout << std::endl;
-//	while (!file.eof())
-//	{
-//		// read packet header
-//		pcaprec_hdr_t pcaprec_hdr;
-//		reset_pcaprec_hdr_t(pcaprec_hdr);
-//		file.read(reinterpret_cast<char *>(&pcaprec_hdr.ts_sec), sizeof(pcaprec_hdr.ts_sec));
-//
-//		if (file.eof()) {
-//			break;
-//		}
-//
-//		file.read(reinterpret_cast<char *>(&pcaprec_hdr.ts_usec), sizeof(pcaprec_hdr.ts_usec));
-//		file.read(reinterpret_cast<char *>(&pcaprec_hdr.incl_len), sizeof(pcaprec_hdr.incl_len));
-//		file.read(reinterpret_cast<char *>(&pcaprec_hdr.orig_len), sizeof(pcaprec_hdr.orig_len));
-//
-//		// read the packet payload into a buffer
-//		file.read(buffer, pcaprec_hdr.incl_len);
-//
-//		////std::vector<int8_t> data_as_vector;
-//		//// read data
-//		//for (int i = 0; i < pcaprec_hdr.incl_len; i++) 
-//		//{
-//		//	int8_t data;
-//		//	file.read(reinterpret_cast<char *>(&data), sizeof(data));
-//		//	std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data & 0xFF) << " ";
-//		//
-//		//	//data_as_vector.push_back(data);
-//		//}
-//		//std::cout << std::dec << std::endl << std::endl;
-//
-//		write_pcaprec_hdr_t(file_copy, 1000, pcaprec_hdr.incl_len, reinterpret_cast<unsigned char *>(buffer));
-//	}
-//
-//	file.close();
-//
-//	file_copy.flush();
-//	file_copy.close();
-//	*/
-//
-///**/
-//	/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
-//	std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
-//	if (!temp_file.is_open())
-//	{
-//		std::cout << "Could not open " << filename << std::endl;
-//		return 0;
-//	}
-//	file = &temp_file;*/
-//
+int main()
+{
+    std::cout << "Hello HCI test!" << std::endl;
+
+	/*
+
+	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
+
+	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
+	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
+
+	std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_dump.pklg";
+
+	std::fstream file(filename, std::ios::in | std::ios::binary);
+	if (!file.is_open())
+	{
+		std::cout << "Could not open " << filename << std::endl;
+
+		return 0;
+	}
+
+	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pklg";
+	std::fstream file_copy;
+	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
+	if (!file_copy.is_open())
+	{
+		std::cout << "Could not open " << filename_copy << std::endl;
+
+		return 0;
+	}
+
+	std::cout << std::endl;
+	while (!file.eof())
+	{
+		if (packetlogger_read_packet(file, [&file_copy](packetlogger_header_t& header, uint8_t hci_packet_type, char* data) -> void {
+			
+			// if string type, output a string
+			if (hci_packet_type >= 0xFB) 
+			{
+				std::string s(data, (header.len - 9));
+				std::cout << s << std::endl;
+			}
+
+			// DEBUG dump packet
+			for (int i = 0; i < header.len - 9; i++)
+			{
+				std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data[i] & 0xFF) << " ";
+			}
+			std::cout << std::dec << std::endl << std::endl;
+
+			if (hci_packet_type < 0xFB) 
+			{
+				// header = length + timestamp
+				file_copy.write(reinterpret_cast<char *>(&header.len), sizeof(header.len));
+				file_copy.write(reinterpret_cast<char *>(&header.ts), sizeof(header.ts));
+
+				// hci packet type
+				file_copy.write(reinterpret_cast<char *>(&hci_packet_type), sizeof(hci_packet_type));
+
+				// data
+				for (int i = 0; i < (header.len - 9); i++)
+				{
+					uint8_t d = data[i];
+					file_copy.write(reinterpret_cast<char *>(&d), sizeof(d));
+				}
+			}
+		}))
+		{
+			std::cout << "Not an Apple (Bluetooth) packetlogger file! " << filename << std::endl;
+
+			file.flush();
+			file.close();
+
+			return -1;
+		}
+	}
+
+	file.flush();
+	file.close();
+
+	return 0;
+	*/
+
+	/*file_copy.flush();
+	file_copy.close();*/
+
+	/*
+	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
+
+	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.cap";
+	std::string filename = "C:/aaa_se/hci_bluetooth/doc/Bluetooth1.pcap";
+
+	std::fstream file(filename, std::ios::in | std::ios::binary);
+	if (!file.is_open())
+	{
+		std::cout << "Could not open " << filename << std::endl;
+
+		return 0;
+	}
+
+	std::string filename_copy = "C:/aaa_se/hci_bluetooth/doc/copied.pcap";
+	std::fstream file_copy;
+	file_copy.open(filename_copy, std::ios::out | std::ios::trunc | std::ios::binary);
+	if (!file_copy.is_open())
+	{
+		std::cout << "Could not open " << filename_copy << std::endl;
+
+		return 0;
+	}
+
+	pcap_hdr_t pcap_hdr;
+	reset_pcap_hdr_t(pcap_hdr);
+
+	// magic_number: used to detect the file format itself and the byte ordering.
+	// The writing application writes 0xa1b2c3d4 with it's native byte ordering 
+	// format into this field. The reading application will read either 0xa1b2c3d4 
+	// (identical) or 0xd4c3b2a1 (swapped). If the reading application reads the 
+	// swapped 0xd4c3b2a1 value, it knows that all the following fields will have to be swapped too.
+	file.read(reinterpret_cast<char *>(&pcap_hdr.magic_number), sizeof(pcap_hdr.magic_number));
+	if (pcap_hdr.magic_number != 2712847316U)
+	{
+		std::cout << "Not a pcap file! " << filename << std::endl;
+		file.close();
+
+		return 0;
+	}
+
+	// version_major, version_minor: the version number of this file format (current version is 2.4)
+	file.read(reinterpret_cast<char *>(&pcap_hdr.version_major), sizeof(pcap_hdr.version_major));
+	file.read(reinterpret_cast<char *>(&pcap_hdr.version_minor), sizeof(pcap_hdr.version_minor));
+
+	// thiszone: the correction time in seconds between GMT (UTC) and the local timezone of
+	// the following packet header timestamps. Examples: If the timestamps are in GMT (UTC),
+	// thiszone is simply 0. If the timestamps are in Central European time (Amsterdam, Berlin, …) 
+	// which is GMT + 1:00, thiszone must be -3600. In practice, time stamps are always in GMT, 
+	// so thiszone is always 0.
+	file.read(reinterpret_cast<char *>(&pcap_hdr.thiszone), sizeof(pcap_hdr.thiszone));
+
+	// sigfigs: in theory, the accuracy of time stamps in the capture; in practice, all tools set it to 0
+	file.read(reinterpret_cast<char *>(&pcap_hdr.sigfigs), sizeof(pcap_hdr.sigfigs));
+
+	// snaplen: the "snapshot length" for the capture (typically 65535 or even more, 
+	// but might be limited by the user), see: incl_len vs. orig_len below
+	file.read(reinterpret_cast<char *>(&pcap_hdr.snaplen), sizeof(pcap_hdr.snaplen));
+
+	// network: link - layer header type, specifying the type of headers at the beginning of 
+	// the packet(e.g. 1 for Ethernet, see tcpdump.org's link-layer header types page for details); 
+	// this can be various types such as 802.11, 802.11 with various radio information, PPP, 
+	// Token Ring, FDDI, etc.
+	file.read(reinterpret_cast<char *>(&pcap_hdr.network), sizeof(pcap_hdr.network));
+
+	// write copy header
+	pcap_hdr_t pcap_hdr_copy;
+	reset_pcap_hdr_t(pcap_hdr_copy);
+
+	pcap_hdr_copy.magic_number = 0xa1b2c3d4;
+	pcap_hdr_copy.version_major = 0x02;
+	pcap_hdr_copy.version_minor = 0x04;
+	pcap_hdr_copy.thiszone = 0x00;
+	pcap_hdr_copy.sigfigs = 0x00;
+	pcap_hdr_copy.snaplen = pcap_hdr.snaplen;//0xFFFF;
+	pcap_hdr_copy.network = 201; //0x01;
+
+	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.magic_number), sizeof(pcap_hdr_copy.magic_number));
+	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_major), sizeof(pcap_hdr_copy.version_major));
+	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.version_minor), sizeof(pcap_hdr_copy.version_minor));
+	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.thiszone), sizeof(pcap_hdr_copy.thiszone));
+	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.sigfigs), sizeof(pcap_hdr_copy.sigfigs));
+	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.snaplen), sizeof(pcap_hdr_copy.snaplen));
+	file_copy.write(reinterpret_cast<char *>(&pcap_hdr_copy.network), sizeof(pcap_hdr_copy.network));
+
+	std::cout << std::endl;
+	while (!file.eof())
+	{
+		// read packet header
+		pcaprec_hdr_t pcaprec_hdr;
+		reset_pcaprec_hdr_t(pcaprec_hdr);
+		file.read(reinterpret_cast<char *>(&pcaprec_hdr.ts_sec), sizeof(pcaprec_hdr.ts_sec));
+
+		if (file.eof()) {
+			break;
+		}
+
+		file.read(reinterpret_cast<char *>(&pcaprec_hdr.ts_usec), sizeof(pcaprec_hdr.ts_usec));
+		file.read(reinterpret_cast<char *>(&pcaprec_hdr.incl_len), sizeof(pcaprec_hdr.incl_len));
+		file.read(reinterpret_cast<char *>(&pcaprec_hdr.orig_len), sizeof(pcaprec_hdr.orig_len));
+
+		// read the packet payload into a buffer
+		file.read(buffer, pcaprec_hdr.incl_len);
+
+		////std::vector<int8_t> data_as_vector;
+		//// read data
+		//for (int i = 0; i < pcaprec_hdr.incl_len; i++) 
+		//{
+		//	int8_t data;
+		//	file.read(reinterpret_cast<char *>(&data), sizeof(data));
+		//	std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data & 0xFF) << " ";
+		//
+		//	//data_as_vector.push_back(data);
+		//}
+		//std::cout << std::dec << std::endl << std::endl;
+
+		write_pcaprec_hdr_t(file_copy, 1000, pcaprec_hdr.incl_len, reinterpret_cast<unsigned char *>(buffer));
+	}
+
+	file.close();
+
+	file_copy.flush();
+	file_copy.close();
+	*/
+
+/**/
+	/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
+	std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+	if (!temp_file.is_open())
+	{
+		std::cout << "Could not open " << filename << std::endl;
+		return 0;
+	}
+	file = &temp_file;*/
+
 //	std::cout << "libusb_init() ..." << std::endl;
-//	int r = libusb_init(&context);
-//	if (r < 0)
-//	{
-//		return r;
-//	}
+	int r = libusb_init(&context);
+	if (r < 0)
+	{
+		return r;
+	}
 //	std::cout << "libusb_init() done." << std::endl;
-//
-//#if 1
-//	libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
-//#endif
-//
-//	libusb_device **devs;
-//
+
+#if 1
+	libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
+	//libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING);
+#endif
+
+	libusb_device **devs;
+
 //	std::cout << "libusb_get_device_list() ..." << std::endl;
-//	ssize_t cnt = libusb_get_device_list(context, &devs);
-//	if (cnt < 0) {
-//		libusb_exit(context);
-//		context = NULL;
-//
-//		return (int)cnt;
-//	}
+	ssize_t cnt = libusb_get_device_list(context, &devs);
+	if (cnt < 0) {
+		libusb_exit(context);
+		context = NULL;
+
+		return (int)cnt;
+	}
 //	std::cout << "libusb_get_device_list() done." << std::endl;
-//
-//	find_dev(devs);
-//
-//	if (*devs != NULL)
-//	{
-//		std::cout << "libusb_free_device_list() ..." << std::endl;
-//		libusb_free_device_list(devs, 1);
-//		*devs = NULL;
-//		std::cout << "libusb_free_device_list() done." << std::endl;
-//	}
-//
-//	if (context != NULL)
-//	{
-//		std::cout << "libusb_exit() ..." << std::endl;
-//		libusb_exit(context);
-//		context = NULL;
-//		std::cout << "libusb_exit() done." << std::endl;
-//	}
-//
-//	file.flush();
-//	file.close();
-//
-//	return 0;
-//
-//}
+
+	find_dev(devs);
+
+	if (*devs != NULL)
+	{
+		std::cout << "libusb_free_device_list() ..." << std::endl;
+		libusb_free_device_list(devs, 1);
+		*devs = NULL;
+		std::cout << "libusb_free_device_list() done." << std::endl;
+	}
+
+	if (context != NULL)
+	{
+		std::cout << "libusb_exit() ..." << std::endl;
+		libusb_exit(context);
+		context = NULL;
+		std::cout << "libusb_exit() done." << std::endl;
+	}
+
+	file.flush();
+	file.close();
+
+	return 0;
+
+}

@@ -236,3 +236,72 @@ On the receiver side, L2CAP will reassemble the message and hand over the entire
 layers of the stack. To the upper layers it will look like as if a huge packet has been transferred
 over the lower layers although the lowers are only capable of dealing with fractions of messages
 one at a time.
+
+
+# Service Discovery Protocol SDP
+
+The SDP is used by a client/application to find out what services are provided by a server.
+
+The SDP protocol is exchanged over the L2CAP protocol which is used as a lower level transport protocol.
+
+The way to send a SDP message to a SDP server works as follows in the most simple case:
+
+At first, information requests and information responses are exchanged using L2CAP onto the channel 0x0001 which is used for configuration.
+The channel 0x0001 is mandatory for all L2CAP participants! It has to exist whereas further channels can be created on demand.
+
+```
+47	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		L2CAP	15	Rcvd Information Request (Extended Features Mask)
+48	0.000000	Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		70:5f:a3:0f:8a:ab ()		L2CAP	21	Sent Information Response (Extended Features Mask, Success)
+
+50	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		L2CAP	15	Rcvd Information Request (Fixed Channels Supported)
+51	0.000000	Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		70:5f:a3:0f:8a:ab ()		L2CAP	25	Sent Information Response (Fixed Channels Supported, Success)
+```
+
+Once the information requests are done, a connection request for the SDP protocol arrives.
+The connection request for SDP is also exchanged over the configuration channel 0x0001.
+During the connection request, both sides create new channels especially for the SDP protocol.
+
+```
+54	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		L2CAP	17	Rcvd Connection Request (SDP, SCID: 0x0048)
+55	0.000000	Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		70:5f:a3:0f:8a:ab ()		L2CAP	21	Sent Connection Response - Success (SCID: 0x0048, DCID: 0x0041)
+```
+
+Once the connection request for the SDP protocol has been accepted, both sides now have created specific
+channels for SDP transfer. These newly created channels have to remember for which protocol they have been created,
+that is they have to store the PSM (Protocol Service Multiplexer) that was contained in the connection request.
+
+These channels are configured in the next few steps.
+The configuration phase is similar to the handshake in the telnet program where both parties 
+negotiate which channel characteristics and features they want.
+The minimal negotiation is about the MTU (Maximum Transfer Unit)
+All these messages are still exchanged via the channel 0x0001 for configuration!
+The messages contain the IDs of the channels to configure, but the messages themselves are sent to the 0x0001 channel
+of the respective communication partner.
+
+```
+58	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		L2CAP	21	Rcvd Configure Request (DCID: 0x0041)
+60	0.000000	Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		70:5f:a3:0f:8a:ab ()		L2CAP	21	Sent Configure Request (DCID: 0x0048)
+
+62	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		L2CAP	19	Rcvd Configure Response - Success (SCID: 0x0041)
+64	0.000000	Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		70:5f:a3:0f:8a:ab ()		L2CAP	23	Sent Configure Response - Success (SCID: 0x0048)
+```
+
+Once the channels for SDP traffic have been configured correctly on both sides, the first message is transferred
+via the newly created and configured channels for SDP!
+
+Every message that arrives at a newly created channel has to be processed using a parser for the protocol
+for which the channel has been created.
+The channel 0x0001 has to be connected to a protocol parser that understand the configuration commands!
+If a channel has been created for the SDP protocol, then all message arriving over that channel are implicitly
+parsed by a protocol parser that understand the SDP protocol! You have to implement those parsers yourself and 
+somehow call them for their respective channels.
+This means that during channel construction, you look at the PSM (Protocol Service Multiplexer) that is sent
+whiting the connection request. The created channel stores that PSM so it knows what format the packets have
+that arrive on that channel. Once a L2CAP packet arrives, you look at the destination channel ID to retrieve
+the channel from your datastore. Then, look at the PSM stored in that channel. Then for that PSM retrieve
+a parser, then apply the parser to the packet that has arrived over that channel!
+
+```
+66	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		SDP	29	Rcvd Service Search Attribute Request : Serial Port: Attribute Range (0x0000 - 0xffff) 
+... SDP connection response missing here
+```

@@ -33,7 +33,9 @@ enum class DataElementType {
 	sequence,
 	alternative,
 	url,
-	unknown
+	unknown,
+
+	dummy_uint
 };
 
 class DataElement
@@ -66,6 +68,8 @@ public:
  * data - 
  * index -
  * data_element -
+ *
+ * return - amount of bytes that have been read and converted into the DataElement
  */
 uint8_t readDataElementHeader(const uint8_t* data, uint8_t index, DataElement* data_element);
 
@@ -73,6 +77,8 @@ uint8_t readDataElementHeader(const uint8_t* data, uint8_t index, DataElement* d
  * data -
  * index -
  * data_element -
+ *
+ * return - amount of bytes that have been read and converted into the DataElement
  */
 uint8_t readDataElementBody(const uint8_t* data, uint8_t index, DataElement** data_element);
 
@@ -81,7 +87,7 @@ uint8_t readDataElementBody(const uint8_t* data, uint8_t index, DataElement** da
  * start_index -
  * current_data_element -
  */
-uint8_t processSDPData(const uint8_t* data, const uint8_t start_index, DataElement* current_data_element);
+uint8_t deserializeDataElement(const uint8_t* data, const uint8_t start_index, DataElement* current_data_element);
 
 /**
  * data_element - the DataElement that is output including all it's child DataElements.
@@ -92,6 +98,12 @@ void dumpDataElement(const DataElement* data_element, const uint8_t indent_count
 
 uint8_t serializeDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index);
 
+uint8_t serializeSimpleDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index);
+
 uint8_t serializeSequenceDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index);
 
 uint8_t type_to_code(DataElementType type);
+
+uint8_t sdpServiceSearchAttributeRequest(const unsigned char* data, const uint8_t current_index, uint16_t& sdp_transaction_id);
+
+uint8_t sdpServiceSearchAttributeResponse(std::array<uint8_t, 256>& target);

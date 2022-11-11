@@ -140,7 +140,7 @@ uint8_t readDataElementBody(const uint8_t* data, uint8_t index, DataElement** da
 	return bytes_consumed;
 }
 
-uint8_t processSDPData(const uint8_t* data, const uint8_t start_index, DataElement* current_data_element)
+uint8_t deserializeDataElement(const uint8_t* data, const uint8_t start_index, DataElement* current_data_element)
 {
 	uint8_t bytes_consumed = 0;
 
@@ -237,7 +237,7 @@ void dumpDataElement(const DataElement* data_element, const uint8_t indent_count
 		break;
 
 	case DataElementType::uuid:
-		std::cout << temp_indent_string << "value: " << data_element->value_uuid << std::endl;
+		std::cout << temp_indent_string << "value: " << std::hex << std::setfill('0') << std::setw(8) << data_element->value_uuid << std::dec << " (" << data_element->value_uuid << "d)" << std::endl;
 		break;
 
 	case DataElementType::text_string:
@@ -295,7 +295,7 @@ uint8_t type_to_code(DataElementType type)
 	}
 }
 
-uint8_t serializeDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index)
+uint8_t serializeSimpleDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index)
 {
 	uint8_t bytes_created = 0;
 
@@ -473,13 +473,12 @@ uint8_t serializeSequenceDataElement(std::array<uint8_t, 256>& target, const Dat
 	while (!deque.empty())
 	{ 
 		DataElement current_data_element = deque.front();
-		temp_start_index += serializeDataElement(target, current_data_element, temp_start_index);
+		temp_start_index += serializeSimpleDataElement(target, current_data_element, temp_start_index);
 		deque.pop_front();
 
 		if (current_data_element.type == DataElementType::sequence)
 		{
 			// insert the children into the queue at the front if there are any
-			//for (auto child : current_data_element.children)
 			std::vector<DataElement*>::reverse_iterator it = current_data_element.children.rbegin();
 			while (it != current_data_element.children.rend())
 			{
@@ -490,4 +489,279 @@ uint8_t serializeSequenceDataElement(std::array<uint8_t, 256>& target, const Dat
 	}
 
 	return temp_start_index;
+}
+
+uint8_t serializeDataElement(std::array<uint8_t, 256>& target, const DataElement& data_element, const uint8_t start_index)
+{
+	if (data_element.type == DataElementType::sequence)
+	{
+		return serializeSequenceDataElement(target, data_element, start_index);
+	}
+	else 
+	{
+		return serializeSimpleDataElement(target, data_element, start_index);
+	}
+}
+
+uint8_t sdpServiceSearchAttributeRequest(const unsigned char* data, const uint8_t current_index, uint16_t& sdp_transaction_id)
+{
+	uint8_t idx = current_index;
+
+	// SDP transaction id
+	uint8_t sdp_transaction_id_upper = data[idx++];
+	uint8_t sdp_transaction_id_lower = data[idx++];
+	sdp_transaction_id = (sdp_transaction_id_upper << 8) + sdp_transaction_id_lower;
+	printf("sdp_transaction_id: 0x%04x\n", sdp_transaction_id);
+
+	// SDP parameter length
+	uint8_t sdp_parameter_length_upper = data[idx++];
+	uint8_t sdp_parameter_length_lower = data[idx++];
+	uint16_t sdp_parameter_length = (sdp_parameter_length_upper << 8) + sdp_parameter_length_lower;
+	printf("sdp_parameter_length: 0x%04x\n", sdp_parameter_length);
+
+	// Data Element - Service Search Pattern
+	printf("Data Element - Service Search Pattern\n");
+	DataElement service_search_pattern_data_element;
+	idx += deserializeDataElement(data, idx, &service_search_pattern_data_element);
+
+	// this data element contains a uuid which encodes the type of service
+	// that the client is looking for (such as 0x1101 for Serial Port)
+	DataElement* service_uuid = service_search_pattern_data_element.children.at(0);
+	uint16_t requested_uuid = service_uuid->value_uuid;
+
+	// DEBUG
+	dumpDataElement(&service_search_pattern_data_element, 0, "    ");
+
+	// SDP maximum attribute count
+	uint8_t sdp_maximum_attribute_count_upper = data[idx++];
+	uint8_t sdp_maximum_attribute_count_lower = data[idx++];
+	uint16_t sdp_maximum_attribute_count = (sdp_maximum_attribute_count_upper << 8) + sdp_maximum_attribute_count_lower;
+	printf("sdp_maximum_attribute_count: 0x%04x\n", sdp_maximum_attribute_count);
+
+	// Data Element - Attribute ID List
+	// this element contains boundaries for attribute ids and limits
+	// the amount of attributes the client wants to know about
+	printf("Data Element - Attribute ID List\n");
+	DataElement attribute_id_list_data_element;
+	idx += deserializeDataElement(data, idx, &attribute_id_list_data_element);
+
+	// DEBUG
+	dumpDataElement(&attribute_id_list_data_element, 0, "    ");
+
+	switch (requested_uuid)
+	{
+	// 4353
+	case 0x1101:
+		// 0x1101 == Serial Port
+		break;
+
+	default:
+		printf("SDP - Service Search Attribute Request - Unkown service uuid: 0x%04x\n", requested_uuid);
+		break;
+	}
+
+	return idx;
+}
+
+uint8_t sdpServiceSearchAttributeResponse(std::array<uint8_t, 256>& target)
+{
+	DataElement data_element_1;
+	data_element_1.type = DataElementType::sequence;
+	data_element_1.dataElementVarSizeInBytes = 95;
+
+	DataElement data_element_2;
+	data_element_1.children.push_back(&data_element_2);
+	data_element_2.type = DataElementType::sequence;
+	data_element_2.dataElementVarSizeInBytes = 92;
+
+	// Service Attribute: Service Record Handle > Attribute ID
+	DataElement data_element_3;
+	data_element_2.children.push_back(&data_element_3);
+	data_element_3.type = DataElementType::uint;
+	data_element_3.dataElementVarSizeInBytes = 2;
+	data_element_3.value_uint32 = 0x0000;
+
+	// Service Attribute: Service Record Handle > Value
+	DataElement data_element_4;
+	data_element_2.children.push_back(&data_element_4);
+	data_element_4.type = DataElementType::uint;
+	data_element_4.dataElementVarSizeInBytes = 4;
+	data_element_4.value_uint32 = 0x00010001;
+
+	// Service Attribute: Service Class ID List > Attribute ID
+	DataElement data_element_5;
+	data_element_2.children.push_back(&data_element_5);
+	data_element_5.type = DataElementType::uint;
+	data_element_5.dataElementVarSizeInBytes = 2;
+	data_element_5.value_uint32 = 0x0001;
+
+	// Service Attribute: Service Class ID List > Value
+	DataElement data_element_6;
+	data_element_2.children.push_back(&data_element_6);
+	data_element_6.type = DataElementType::sequence;
+	data_element_6.dataElementVarSizeInBytes = 3;
+	data_element_6.value_uint32 = 0x0001;
+
+	DataElement data_element_7;
+	data_element_6.children.push_back(&data_element_7);
+	data_element_7.type = DataElementType::uuid;
+	data_element_7.dataElementVarSizeInBytes = 2;
+	data_element_7.value_uuid = 0x1101;
+
+	// Service Attribute: Protocol Descriptor List > Attribute ID
+	DataElement data_element_8;
+	data_element_2.children.push_back(&data_element_8);
+	data_element_8.type = DataElementType::uint;
+	data_element_8.dataElementVarSizeInBytes = 2;
+	data_element_8.value_uint32 = 0x0004;
+
+	// Service Attribute: Protocol Descriptor List > Value
+	DataElement data_element_9;
+	data_element_2.children.push_back(&data_element_9);
+	data_element_9.type = DataElementType::sequence;
+	data_element_9.dataElementVarSizeInBytes = 14;
+	data_element_9.value_uint32 = 0x0001;
+
+	// protocol #1: L2CAP
+	DataElement data_element_10;
+	data_element_9.children.push_back(&data_element_10);
+	data_element_10.type = DataElementType::sequence;
+	data_element_10.dataElementVarSizeInBytes = 3;
+
+	DataElement data_element_11;
+	data_element_10.children.push_back(&data_element_11);
+	data_element_11.type = DataElementType::uuid;
+	data_element_11.dataElementVarSizeInBytes = 2;
+	data_element_11.value_uuid = 0x0100;
+
+	// protocol #2: RFCOMM
+	DataElement data_element_12;
+	data_element_9.children.push_back(&data_element_12);
+	data_element_12.type = DataElementType::sequence;
+	data_element_12.dataElementVarSizeInBytes = 5;
+
+	DataElement data_element_13;
+	data_element_12.children.push_back(&data_element_13);
+	data_element_13.type = DataElementType::uuid;
+	data_element_13.dataElementVarSizeInBytes = 2;
+	data_element_13.value_uuid = 0x0003;
+
+	// here we add two bytes of unknown origin! Even the wireshark dissector cannot parse them!
+	DataElement data_element_unknown_dummy;
+	data_element_12.children.push_back(&data_element_unknown_dummy);
+	data_element_unknown_dummy.type = DataElementType::dummy_uint;
+	data_element_unknown_dummy.dataElementVarSizeInBytes = 2;
+	data_element_unknown_dummy.value_uuid = 0x0801;
+
+	//// protocol #3: unknown
+	//DataElement data_element_14;
+	//data_element_9.children.push_back(&data_element_14);
+	//data_element_14.type = DataElementType::sequence;
+	//data_element_14.dataElementVarSizeInBytes = 5;
+
+	//DataElement data_element_15;
+	//data_element_14.children.push_back(&data_element_15);
+	//data_element_15.type = DataElementType::uuid;
+	//data_element_15.dataElementVarSizeInBytes = 2;
+	//data_element_15.value_uuid = 0x0003;
+
+	// Service Attribute: Browse Group List > Attribute ID
+	DataElement data_element_16;
+	data_element_2.children.push_back(&data_element_16);
+	data_element_16.type = DataElementType::uint;
+	data_element_16.dataElementVarSizeInBytes = 2;
+	data_element_16.value_uint32 = 0x0005;
+
+	// Service Attribute: Browse Group List > Value
+	DataElement data_element_17;
+	data_element_2.children.push_back(&data_element_17);
+	data_element_17.type = DataElementType::sequence;
+	data_element_17.dataElementVarSizeInBytes = 3;
+
+	DataElement data_element_18;
+	data_element_17.children.push_back(&data_element_18);
+	data_element_18.type = DataElementType::uuid;
+	data_element_18.dataElementVarSizeInBytes = 2;
+	data_element_18.value_uuid = 0x1002;
+
+	// Service Attribute: Language Base Attribute ID List > Attribute ID
+	DataElement data_element_19;
+	data_element_2.children.push_back(&data_element_19);
+	data_element_19.type = DataElementType::uint;
+	data_element_19.dataElementVarSizeInBytes = 2;
+	data_element_19.value_uint32 = 0x0006;
+
+	// Service Attribute: Language Base Attribute ID List > Value
+	DataElement data_element_20;
+	data_element_2.children.push_back(&data_element_20);
+	data_element_20.type = DataElementType::sequence;
+	data_element_20.dataElementVarSizeInBytes = 9;
+
+	DataElement data_element_21;
+	data_element_20.children.push_back(&data_element_21);
+	data_element_21.type = DataElementType::uint;
+	data_element_21.dataElementVarSizeInBytes = 2;
+	data_element_21.value_uint32 = 0x656e;
+
+	DataElement data_element_22;
+	data_element_20.children.push_back(&data_element_22);
+	data_element_22.type = DataElementType::uint;
+	data_element_22.dataElementVarSizeInBytes = 2;
+	data_element_22.value_uint32 = 0x006a;
+
+	DataElement data_element_23;
+	data_element_20.children.push_back(&data_element_23);
+	data_element_23.type = DataElementType::uint;
+	data_element_23.dataElementVarSizeInBytes = 2;
+	data_element_23.value_uint32 = 0x0100;
+
+	// Service Attribute: Bluetooth Profile Descriptor List > Attribute ID
+	DataElement data_element_24;
+	data_element_2.children.push_back(&data_element_24);
+	data_element_24.type = DataElementType::uint;
+	data_element_24.dataElementVarSizeInBytes = 2;
+	data_element_24.value_uint32 = 0x0009;
+
+	// Service Attribute: Bluetooth Profile Descriptor List > Value
+	DataElement data_element_25;
+	data_element_2.children.push_back(&data_element_25);
+	data_element_25.type = DataElementType::sequence;
+	data_element_25.dataElementVarSizeInBytes = 9;
+
+	DataElement data_element_26;
+	data_element_25.children.push_back(&data_element_26);
+	data_element_26.type = DataElementType::sequence;
+	data_element_26.dataElementVarSizeInBytes = 6;
+
+	// Profile Descriptor List #1
+	DataElement data_element_27;
+	data_element_26.children.push_back(&data_element_27);
+	data_element_27.type = DataElementType::uuid;
+	data_element_27.dataElementVarSizeInBytes = 2;
+	data_element_27.value_uuid = 0x1101;
+
+	DataElement data_element_28;
+	data_element_26.children.push_back(&data_element_28);
+	data_element_28.type = DataElementType::uint;
+	data_element_28.dataElementVarSizeInBytes = 2;
+	data_element_28.value_uint32 = 0x1102;
+
+	// Service Attribute: Service Name > Attribute ID
+	DataElement data_element_29;
+	data_element_2.children.push_back(&data_element_29);
+	data_element_29.type = DataElementType::uint;
+	data_element_29.dataElementVarSizeInBytes = 2;
+	data_element_29.value_uint32 = 0x0100;
+
+	// Service Attribute: Service Name > Value
+	DataElement data_element_30;
+	data_element_2.children.push_back(&data_element_30);
+	data_element_30.type = DataElementType::text_string;
+	data_element_30.dataElementVarSizeInBytes = 11;
+	data_element_30.value_text = "SPP Counter";
+
+	const uint8_t start_index = 0;
+	auto bytes_created = serializeDataElement(target, data_element_1, start_index);
+
+	return bytes_created;
 }

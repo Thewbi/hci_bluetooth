@@ -261,6 +261,7 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 }
 
 #define HCI_EVENT_CODE_COMMAND_COMPLETE 0x0E
+#define HCI_EVENT_LINK_KEY_REQUEST 0x17
 #define HCI_EVENT_TRANSFER_COMPLETE 0x21
 #define HCI_Set_Event_Mask 0x0c01
 //#define HCI_ 0x0c02
@@ -518,6 +519,75 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		printf("completed_packets: %02X:%02X\n", completed_packets_1, completed_packets_0);
 
 		break;
+
+	case HCI_EVENT_LINK_KEY_REQUEST:
+	{
+		printf("HCI_EVENT_LINK_KEY_REQUEST\n");
+
+		// parameter total length
+		parameter_total_length = transfer->buffer[idx++];
+		printf("parameter_total_length: 0x%02x\n", parameter_total_length);
+
+		printf("\n");
+		printf("NOTICE: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+		printf("NOTICE: A Link Key is required for the connection with the device ");
+		// address
+		//printf("BD_ADDR\n");
+		for (int i = (idx + 5); i >= idx; --i) {
+			if (i != idx + 5)
+			{
+				printf(":");
+			}
+			fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
+		}
+		printf("\n");		
+		printf("NOTICE: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+		printf("\n");
+
+		// Request:
+		// 	333	13509.000000	controller		host		HCI_EVT	9	Rcvd Link Key Request
+
+		// Response:
+		// 	335	13509.000000	host		controller		HCI_CMD	10	Sent Link Key Request Negative Reply
+
+		// This event is sent after a RFCOMM client has retrieved a SDP response listing
+		// a RFCOMM server. The connection to the server will not be established unless this
+		// request is answered!
+		// 
+		// Since no Link Key was exchanged (at least not that I know of), 
+		// a Link Key Request Negative Reply is sent as a response to the link key request
+
+		// 00 0c 04 06 ab 8a 0f a3 5f 70
+		unsigned char buffer[1024];
+		for (int i = 0; i < 1024; ++i) {
+			buffer[i] = 0x00;
+		}
+
+		int idx = 0;
+
+		// command opcode
+		buffer[idx++] = 0x0c;
+		buffer[idx++] = 0x04;
+
+		// total length
+		buffer[idx++] = 0x06;
+
+		// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
+		buffer[idx++] = 0xAB;
+		buffer[idx++] = 0x8A;
+		buffer[idx++] = 0x0F;
+		buffer[idx++] = 0xA3;
+		buffer[idx++] = 0x5F;
+		buffer[idx++] = 0x70;
+
+		Sleep(wait);
+		usb_send_cmd_packet(buffer, idx);
+
+		//bool is_sent = true;
+		//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+	}
+	break;
 
 	case 0x31:
 	{

@@ -290,6 +290,9 @@ uint8_t type_to_code(DataElementType type)
 	case DataElementType::url:
 		return 8;
 
+	case DataElementType::dummy_uint:
+		return 0xFF;
+
 	default:
 		throw 1;
 	}
@@ -307,6 +310,12 @@ uint8_t serializeSimpleDataElement(std::array<uint8_t, 256>& target, const DataE
 	uint8_t max = 0;
 	switch (data_element.type)
 	{
+	case DataElementType::dummy_uint:
+	{
+		max = data_element.dataElementVarSizeInBytes;
+	}
+	break;
+
 	case DataElementType::uint:
 	{
 		switch (data_element.dataElementVarSizeInBytes)
@@ -328,15 +337,9 @@ uint8_t serializeSimpleDataElement(std::array<uint8_t, 256>& target, const DataE
 
 		case 8:
 			throw 8; // how to convert a uint32 into a 8 byte?
-			/*size_descriptor = 3;
-			max = 8;
-			break;*/
 
 		case 16:
 			throw 16; // how to convert a uint32 into a 16 byte?
-			/*size_descriptor = 4;
-			max = 16;
-			break;*/
 
 		default:
 			throw 2;
@@ -388,7 +391,6 @@ uint8_t serializeSimpleDataElement(std::array<uint8_t, 256>& target, const DataE
 			size_descriptor = 6;
 
 			// type and size descriptor (1 Byte) + 2 byte length variable
-			//max = 1 + 2;
 			max = 2;
 		}
 		else if (data_element.dataElementVarSizeInBytes <= 0xFFFFFF)
@@ -396,16 +398,12 @@ uint8_t serializeSimpleDataElement(std::array<uint8_t, 256>& target, const DataE
 			size_descriptor = 7;
 
 			// type and size descriptor (1 Byte) + 3 byte length variable
-			//max = 1 + 3;
 			max = 3;
 		}
 		else
 		{
 			throw 1;
-		}
-		
-		//max = data_element.dataElementVarSizeInBytes;
-		
+		}		
 	}
 	break;
 
@@ -413,11 +411,23 @@ uint8_t serializeSimpleDataElement(std::array<uint8_t, 256>& target, const DataE
 		throw 1;
 	}
 
-	target.at(start_index) = ((type_descriptor & 0x1F) << 3) + (size_descriptor & 0x07);
-	bytes_created++;
+	// for a dummy, we add plain old bytes without any encoding!
+	if (data_element.type != DataElementType::dummy_uint)
+	{
+		target.at(start_index) = ((type_descriptor & 0x1F) << 3) + (size_descriptor & 0x07);
+		bytes_created++;
+	}
 
 	switch (data_element.type)
 	{
+	case DataElementType::dummy_uint:
+		// dummy_uint will just add its bytes without any special encoding!
+		for (int i = max; i > 0; i--)
+		{
+			target.at(start_index + bytes_created + i - 1) = data_element.value_uint32 >> (8 * (max - i));
+		}
+		break;
+
 	case DataElementType::uint:
 		// value
 		for (int i = max; i > 0; i--)
@@ -647,11 +657,13 @@ uint8_t sdpServiceSearchAttributeResponse(std::array<uint8_t, 256>& target)
 	data_element_13.value_uuid = 0x0003;
 
 	// here we add two bytes of unknown origin! Even the wireshark dissector cannot parse them!
+	// I do not know if I should drink more or less beer to understand this but it makes no
+	// sense right now! This is not conforming to the spec!
 	DataElement data_element_unknown_dummy;
 	data_element_12.children.push_back(&data_element_unknown_dummy);
 	data_element_unknown_dummy.type = DataElementType::dummy_uint;
 	data_element_unknown_dummy.dataElementVarSizeInBytes = 2;
-	data_element_unknown_dummy.value_uuid = 0x0801;
+	data_element_unknown_dummy.value_uint32 = 0x0801;
 
 	//// protocol #3: unknown
 	//DataElement data_element_14;

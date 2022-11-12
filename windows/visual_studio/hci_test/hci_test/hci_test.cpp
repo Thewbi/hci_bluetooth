@@ -161,12 +161,12 @@ void write_pcaprec_hdr_t(std::fstream& file, uint32_t time, bool is_sent, hci_pa
 	file.write(reinterpret_cast<char *>(&direction), sizeof(direction));
 
 	// source: https://software-dl.ti.com/simplelink/esd/simplelink_cc13x2_sdk/1.60.00.29_new/exports/docs/ble5stack/vendor_specific_guide/BLE_Vendor_Specific_HCI_Guide/hci_interface.html
-	
+
 	// The HCI supports four types of packets : 
 	// Command Packet, Asynchronous Data Packet, Synchronous Data Packet, and Event Packet.
 	// The packet type is a one byte value that precedes the HCI packet.
 	// The packet type has the following values :
-	
+
 	//uint8_t prefix = 0x01; // HCI command
 	// ACL - Asynchronous Data	0x02
 	// SCO -	Synchronous Data	0x03
@@ -203,20 +203,20 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 	}
 
 	int num_interfaces = config_descriptor->bNumInterfaces;
-//	printf("active configuration has %u interfaces\n", num_interfaces);
+	//	printf("active configuration has %u interfaces\n", num_interfaces);
 
 	int i;
 	for (i = 0; i < num_interfaces; i++)
 	{
 		const struct libusb_interface *interface = &config_descriptor->interface[i];
 		const struct libusb_interface_descriptor * interface_descriptor = interface->altsetting;
-//		printf("interface %u: %u endpoints\n", i, interface_descriptor->bNumEndpoints);
+		//		printf("interface %u: %u endpoints\n", i, interface_descriptor->bNumEndpoints);
 
 		const struct libusb_endpoint_descriptor *endpoint = interface_descriptor->endpoint;
 
 		for (r = 0; r < interface_descriptor->bNumEndpoints; r++, endpoint++)
 		{
-//			printf("- endpoint %x, attributes %x\n", endpoint->bEndpointAddress, endpoint->bmAttributes);
+			//			printf("- endpoint %x, attributes %x\n", endpoint->bEndpointAddress, endpoint->bmAttributes);
 
 			switch (endpoint->bmAttributes & 0x03)
 			{
@@ -225,7 +225,7 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 					continue;
 				}
 				event_in_addr = endpoint->bEndpointAddress;
-//				printf("-> using 0x%2.2X for HCI Events\n", event_in_addr);
+				//				printf("-> using 0x%2.2X for HCI Events\n", event_in_addr);
 				break;
 
 			case LIBUSB_TRANSFER_TYPE_BULK:
@@ -235,12 +235,12 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 						continue;
 					}
 					acl_in_addr = endpoint->bEndpointAddress;
-//					printf("-> using 0x%2.2X for ACL Data In\n", acl_in_addr);
+					//					printf("-> using 0x%2.2X for ACL Data In\n", acl_in_addr);
 				}
 				else {
 					if (acl_out_addr) continue;
 					acl_out_addr = endpoint->bEndpointAddress;
-//					printf("-> using 0x%2.2X for ACL Data Out\n", acl_out_addr);
+					//					printf("-> using 0x%2.2X for ACL Data Out\n", acl_out_addr);
 				}
 				break;
 
@@ -248,17 +248,17 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 				if (endpoint->bEndpointAddress & 0x80) {
 					if (sco_in_addr) continue;
 					sco_in_addr = endpoint->bEndpointAddress;
-//					printf("-> using 0x%2.2X for SCO Data In\n", sco_in_addr);
+					//					printf("-> using 0x%2.2X for SCO Data In\n", sco_in_addr);
 				}
 				else {
 					if (sco_out_addr) continue;
 					sco_out_addr = endpoint->bEndpointAddress;
-//					printf("-> using 0x%2.2X for SCO Data Out\n", sco_out_addr);
+					//					printf("-> using 0x%2.2X for SCO Data Out\n", sco_out_addr);
 				}
 				break;
 
 			default:
-//				printf("Unknown interface");
+				//				printf("Unknown interface");
 				break;
 			}
 		}
@@ -431,7 +431,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 	//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
 
 	write_packet(file, e_hci_packet_type::hci_event, transfer->buffer, transfer->actual_length);
-	
+
 	uint8_t idx = 0;
 
 	uint8_t event_code = transfer->buffer[idx++];
@@ -462,19 +462,19 @@ void dump_hci_event(struct libusb_transfer* transfer)
 	uint8_t event_type = 0;
 	uint8_t address_type = 0;
 
-	uint8_t result_code = 0;	
+	uint8_t result_code = 0;
 
 	uint8_t l2cap_signaling_channel_lower = 0;
 	uint8_t l2cap_signaling_channel_upper = 0;
-	uint8_t l2cap_signaling_channel = 0;
+	uint8_t l2cap_signaling_channel = 0; // TODO fix uint16_t
 
 	uint8_t l2cap_length_lower = 0;
 	uint8_t l2cap_length_upper = 0;
-	uint8_t l2cap_length = 0;
+	uint8_t l2cap_length = 0; // TODO fix uint16_t
 
 	uint8_t data_total_length_lower = 0;
 	uint8_t data_total_length_upper = 0;
-	uint8_t data_total_length = 0;
+	uint8_t data_total_length = 0; // TODO fix uint16_t
 
 	uint8_t l2cap_command_code = 0;
 
@@ -482,11 +482,11 @@ void dump_hci_event(struct libusb_transfer* transfer)
 
 	uint8_t l2cap_command_length_lower = 0;
 	uint8_t l2cap_command_length_upper = 0;
-	uint8_t l2cap_command_length = 0;
+	uint8_t l2cap_command_length = 0; // TODO fix uint16_t
 
 	uint8_t l2cap_information_type_lower = 0;
 	uint8_t l2cap_information_type_upper = 0;
-	uint8_t l2cap_information_type = 0;
+	uint8_t l2cap_information_type = 0; // TODO fix uint16_t
 
 	uint8_t encryption_mode_encryption_disabled = 0;
 
@@ -587,13 +587,14 @@ void dump_hci_event(struct libusb_transfer* transfer)
 			}
 			fprintf(stdout, "%02X%s", transfer->buffer[i], (i + 1) % 16 == 0 ? "\n" : "");
 		}
-		printf("\n");		
+		printf("\n");
 		printf("NOTICE: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		printf("\n");
 
 		// BD Addr to which this key belongs to
 		bd_addr bd_addr;
 		read_bd_addr(bd_addr, transfer->buffer, idx);
+
 
 		// Request:
 		// 	333	13509.000000	controller		host		HCI_EVT	9	Rcvd Link Key Request
@@ -632,7 +633,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 			// total length
 			buffer[idx++] = 0x06 + 0x0a;
 
-			// BD_ADDR - (6 byte) - Destination address: 70:5F:A3:0F:8A:AB
+			// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
 			// address of the partner that wants to connect and for which a link key is required
 			/*buffer[idx++] = 0xAB;
 			buffer[idx++] = 0x8A;
@@ -642,14 +643,16 @@ void dump_hci_event(struct libusb_transfer* transfer)
 			buffer[idx++] = 0x70;*/
 			write_bd_addr(buffer, bd_addr, idx);
 
-			// link key (16 byte)
+			// link key
 			write_link_key(buffer, link_key, idx);
 
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
 
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
 			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
-		} 
+		}
 		else
 		{
 			// send "Link Key Request Negative Reply"
@@ -800,66 +803,66 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		break;
 
 	case 0x16:
-		{
-			printf("\n\n\n");
+	{
+		printf("\n\n\n");
 
-			//
-			// HCI command - Send "PIN Code Request Reply Command" command
-			//
+		//
+		// HCI command - Send "PIN Code Request Reply Command" command
+		//
 
-			printf(">>> HCI command - Send \"PIN Code Request Reply Command\" command\n");
+		printf(">>> HCI command - Send \"PIN Code Request Reply Command\" command\n");
 
-			unsigned char buffer[1024];
-			for (int i = 0; i < 1024; ++i) {
-				buffer[i] = 0x00;
-			}
-
-			int idx = 0;
-
-			// command opcode
-			buffer[idx++] = 0x0D;
-			buffer[idx++] = 0x00;
-
-			// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
-			buffer[idx++] = 0xAB;
-			buffer[idx++] = 0x8A;
-			buffer[idx++] = 0x0F;
-			buffer[idx++] = 0xA3;
-			buffer[idx++] = 0x5F;
-			buffer[idx++] = 0x70;
-
-			// PIN_Code_Length (1 Byte)
-			buffer[idx++] = 0x04;
-
-			// PIN_Code (16 Byte)
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			Sleep(wait);
-			usb_send_cmd_packet(buffer, idx);
-
-			//bool is_sent = true;
-			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
-			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
-
-			submit(transfer);
+		unsigned char buffer[1024];
+		for (int i = 0; i < 1024; ++i) {
+			buffer[i] = 0x00;
 		}
-		break;
+
+		int idx = 0;
+
+		// command opcode
+		buffer[idx++] = 0x0D;
+		buffer[idx++] = 0x00;
+
+		// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
+		buffer[idx++] = 0xAB;
+		buffer[idx++] = 0x8A;
+		buffer[idx++] = 0x0F;
+		buffer[idx++] = 0xA3;
+		buffer[idx++] = 0x5F;
+		buffer[idx++] = 0x70;
+
+		// PIN_Code_Length (1 Byte)
+		buffer[idx++] = 0x04;
+
+		// PIN_Code (16 Byte)
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		Sleep(wait);
+		usb_send_cmd_packet(buffer, idx);
+
+		//bool is_sent = true;
+		//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+		submit(transfer);
+	}
+	break;
 
 	case 0x0f:
 		printf("COMMAND STATUS event received!\n");
@@ -896,7 +899,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 
 	case 0x03:
 		printf("CONNECTION COMPLETE event received!\n");
-		
+
 		// 7.7.3 Connection Complete Event - Core_V4.0.pdf - page 718 of 1114
 		// 03 0B 10 0B 00 AB 8A 0F A3 5F 70 01 00
 
@@ -1059,7 +1062,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 			// this does not parse as l2cap packet!
 			//bool is_sent = false;
 			//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
-			
+
 			//file.flush();
 			//file.close();
 
@@ -1143,7 +1146,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 
 			submit(transfer);
 
-			
+
 			////
 			//// Configure request
 			////
@@ -1239,7 +1242,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 				printf("l2cap_command_code: configure request - ???\n");
 			}
 
-		
+
 					  for (int i = 0; i < 1024; ++i) {
 						buffer[i] = 0x00;
 					  }
@@ -1276,7 +1279,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 					  write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
 
 					submit(transfer);
-			
+
 		}
 			break;
 
@@ -1371,7 +1374,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 			//		  write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, idx, buffer);
 
 			//		  submit(transfer);
-			
+
 			break;
 
 		default:
@@ -1396,7 +1399,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		printf("HCI CONNECTION REQUEST received!\n");
 
 		// <<< 04 0A AB 8A 0F A3 5F 70 0C 02 5A 01
-		
+
 		// this works as expected! It parses as an HCI received event for connection request
 		//bool is_sent = false
 		//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, transfer->actual_length, transfer->buffer);
@@ -1506,11 +1509,11 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		// Command_Opcode event parameter. See each command’s definition for
 		// the list of return parameters associated with that command.
 
-		/*if (transfer == NULL) 
+		/*if (transfer == NULL)
 		{
 			printf("transfer is NULL \n");
 		}
-		else 
+		else
 		{
 			printf("transfer->length %d \n", transfer->length);
 			printf("transfer->actual_length %d \n", transfer->actual_length);
@@ -1852,7 +1855,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 			printf("Response to UNKNOWN command\n");
 			break;
 		}
-		break;	
+		break;
 
 	default:
 		printf("Unknown event code: 0x%02x\n", event_code);
@@ -2071,13 +2074,13 @@ void process_control(uint8_t& idx, uint16_t& l2cap_length, struct libusb_transfe
 
 	uint8_t l2cap_command_code = 0;
 
-	uint8_t l2cap_information_type_lower = 0;
-	uint8_t l2cap_information_type_upper = 0;
-	uint16_t l2cap_information_type = 0;
-
 	uint8_t l2cap_command_length_lower = 0;
 	uint8_t l2cap_command_length_upper = 0;
 	uint16_t l2cap_command_length = 0;
+
+	uint8_t l2cap_information_type_lower = 0;
+	uint8_t l2cap_information_type_upper = 0;
+	uint16_t l2cap_information_type = 0;
 
 	l2cap_command_code = transfer->buffer[idx++];
 	printf("l2cap_command_code: 0x%02x\n", l2cap_command_code);
@@ -2299,6 +2302,7 @@ void process_control(uint8_t& idx, uint16_t& l2cap_length, struct libusb_transfe
 		// 01 02 00 04 - option
 
 		//unsigned char buffer[1024];
+		uint8_t buffer[1024];
 		for (int i = 0; i < 1024; i++) {
 			buffer[i] = 0x00;
 		}
@@ -2464,7 +2468,7 @@ void process_control(uint8_t& idx, uint16_t& l2cap_length, struct libusb_transfe
 		// disconnect response
 		// 0b 00 0c 00 08 00 01 00 07 06 04 00 41 00 4d 00
 
-		unsigned char buffer[1024];
+		uint8_t buffer[1024];
 		for (int i = 0; i < 1024; i++) {
 			buffer[i] = 0x00;
 		}
@@ -2819,6 +2823,12 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 		write_packet(file, e_hci_packet_type::hci_synchronous_data, transfer->buffer, transfer->actual_length);
 	}
 
+	/*if (transfer_completed == 46)
+	{
+		printf("closing log file!\n");
+		file.flush();
+		file.close();
+	}*/
 	// Incoming "Information request"
 	// 0B 20 0A 00 06 00 01 00 0A 02 02 00 02 00
 
@@ -2863,7 +2873,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	//
 	// Bluetooth HCI ACL Packet
 	//
-	
+
 	// acl_header / connection handle
 	acl_header_lower = transfer->buffer[idx++];
 	acl_header_upper = transfer->buffer[idx++];
@@ -2947,11 +2957,11 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	//{
 	//	process_control(idx, l2cap_length, transfer);
 	//}
-	//else 
+	//else
 	//{
 	//	printf("Unknown channel!\n");
 	//}
-	
+
 	/*if (transfer_completed == 51) {
 		printf("Closing file\n");
 		file.flush();
@@ -2988,7 +2998,7 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 	print_transfer_status(transfer);
 #endif
 
-	
+
 
 #if 0
 	int result = libusb_event_handler_active(context);
@@ -3916,17 +3926,17 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			// l2cap signaling channel
 			buffer[idx++] = 0x01;
 			buffer[idx++] = 0x00;
-				
+
 			// command code information request
 			buffer[idx++] = 0x0a;
-			
+
 			// command identifier
 			buffer[idx++] = 0x09;
-		
-		    // command length
+
+			// command length
 			buffer[idx++] = 0x02;
 			buffer[idx++] = 0x00;
-				
+
 			// information type fixed channels
 			buffer[idx++] = 0x03;
 			buffer[idx++] = 0x00;
@@ -3987,7 +3997,7 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			buffer[idx++] = 0x08;
 			buffer[idx++] = 0x00;
 
-			// destination CID 
+			// destination CID
 			//buffer[idx++] = 0x40;
 			//buffer[idx++] = 0x00;
 			buffer[idx++] = l2cap_source_cid_lower;
@@ -4290,7 +4300,7 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			// exit the function
 			return;
 		}
-		
+
 
 		/*if (transfer_completed == 57) {
 			printf("Closing file\n");
@@ -4298,7 +4308,7 @@ static void LIBUSB_CALL async_callback(struct libusb_transfer *transfer)
 			file.close();
 		}*/
 
-		
+
 	}
 	else if (transfer->status == LIBUSB_TRANSFER_STALL)
 	{
@@ -4338,7 +4348,7 @@ static int usb_send_acl_packet(uint8_t *packet, int size)
 		fprintf(stdout, "%02X%s", packet[i], (i + 1) % 16 == 0 ? "\n" : " ");
 	}
 	printf("\n");
-	
+
 	// async
 	//libusb_fill_control_setup(hci_cmd_buffer, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 0, 0, 0, size);
 	//memcpy(hci_cmd_buffer + LIBUSB_CONTROL_SETUP_SIZE, packet, size);
@@ -4357,13 +4367,13 @@ static int usb_send_acl_packet(uint8_t *packet, int size)
 	int timeout = 0;
 	//libusb_fill_control_transfer(acl_out_transfer, handle, packet, async_acl_callback, &completed, 0);
 	//libusb_fill_control_transfer(acl_out_transfer, handle, hci_cmd_buffer, async_callback, &completed, 0);
-	
+
 	//libusb_fill_bulk_transfer(acl_out_transfer, handle, acl_out_addr, packet, size, async_acl_callback, &user_data, timeout);
 	acl_out_transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER;
 
 	libusb_fill_bulk_transfer(temp_acl_out_transfer, handle, acl_out_addr, packet, size, async_acl_callback, &user_data, timeout);
 	temp_acl_out_transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER;
-	
+
 
 	// update state before submitting transfer
 	usb_acl_out_active = 1;
@@ -4620,7 +4630,7 @@ static uint8_t find_dev(libusb_device **devs)
 		}
 
 		printf("get [%04X:%04X] device string descriptor \n", desc.idVendor, desc.idProduct);
-		printf("iProduct[%d]: ", desc.iProduct);	
+		printf("iProduct[%d]: ", desc.iProduct);
 
 		if (desc.idVendor == 0x0b05 && desc.idProduct == 0x17cb) {
 
@@ -4805,13 +4815,13 @@ static uint8_t find_dev(libusb_device **devs)
 				printf("libusb_fill_interrupt_transfer() ...\n");
 				// configure event_in handlers
 				libusb_fill_interrupt_transfer(
-					event_in_transfer[c], 
-					handle, 
+					event_in_transfer[c],
+					handle,
 					event_in_addr,
-					hci_event_in_buffer[c], 
-					HCI_ACL_BUFFER_SIZE, 
-					async_callback, 
-					NULL, 
+					hci_event_in_buffer[c],
+					HCI_ACL_BUFFER_SIZE,
+					async_callback,
+					NULL,
 					0);
 				printf("libusb_fill_interrupt_transfer() done.\n");
 
@@ -4848,40 +4858,40 @@ static uint8_t find_dev(libusb_device **devs)
 				/*acl_in_transfer[c]->flags = LIBUSB_TRANSFER_SHORT_NOT_OK
 					| LIBUSB_TRANSFER_FREE_BUFFER | LIBUSB_TRANSFER_FREE_TRANSFER;*/
 
-				// unable to match endpoint to an open interface
+					// unable to match endpoint to an open interface
 
-				// 130 = 0x82
-				//
-				//active configuration has 4 interfaces
-				//	interface 0 : 3 endpoints
-				//	- endpoint 81, attributes 3
-				//	-> using 0x81 for HCI Events
-				//	- endpoint 82, attributes 2
-				//	-> using 0x82 for ACL Data In
-				//	- endpoint 2, attributes 2
-				//	-> using 0x02 for ACL Data Out
-				//	interface 1 : 2 endpoints
-				//	- endpoint 83, attributes 1
-				//	-> using 0x83 for SCO Data In
-				//	- endpoint 3, attributes 1
-				//	-> using 0x03 for SCO Data Out
-				//	interface 2 : 2 endpoints
-				//	- endpoint 84, attributes 2
-				//	- endpoint 4, attributes 2
-				//	interface 3 : 0 endpoints
+					// 130 = 0x82
+					//
+					//active configuration has 4 interfaces
+					//	interface 0 : 3 endpoints
+					//	- endpoint 81, attributes 3
+					//	-> using 0x81 for HCI Events
+					//	- endpoint 82, attributes 2
+					//	-> using 0x82 for ACL Data In
+					//	- endpoint 2, attributes 2
+					//	-> using 0x02 for ACL Data Out
+					//	interface 1 : 2 endpoints
+					//	- endpoint 83, attributes 1
+					//	-> using 0x83 for SCO Data In
+					//	- endpoint 3, attributes 1
+					//	-> using 0x03 for SCO Data Out
+					//	interface 2 : 2 endpoints
+					//	- endpoint 84, attributes 2
+					//	- endpoint 4, attributes 2
+					//	interface 3 : 0 endpoints
 
-				// configure acl_in handlers
+					// configure acl_in handlers
 				void* user_data = NULL;
 				uint8_t timeout = 0;
 				libusb_fill_bulk_transfer(
-					acl_in_transfer[c], 
-					handle, 
+					acl_in_transfer[c],
+					handle,
 					acl_in_addr,
-					hci_acl_in_buffer[c] + HCI_INCOMING_PRE_BUFFER_SIZE, HCI_ACL_BUFFER_SIZE, 
-					async_acl_callback, 
+					hci_acl_in_buffer[c] + HCI_INCOMING_PRE_BUFFER_SIZE, HCI_ACL_BUFFER_SIZE,
+					async_acl_callback,
 					user_data,
 					timeout);
-				
+
 				acl_in_transfer[c]->user_data = NULL;
 
 				// https://stackoverflow.com/questions/56729045/how-to-fix-libusb-error-not-found-error-when-calling-libusb-bulk-transfer
@@ -4952,7 +4962,7 @@ static uint8_t find_dev(libusb_device **devs)
 
 			//bool is_sent = true;
 			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
-			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);	
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 
 			Sleep(wait);
 
@@ -5175,7 +5185,7 @@ static uint8_t find_dev(libusb_device **devs)
 
 int main()
 {
-    std::cout << "Hello HCI test!" << std::endl;
+	std::cout << "Hello HCI test!" << std::endl;
 
 	link_key_database.load_from_file("link_key_database.lkd");
 
@@ -5210,9 +5220,9 @@ int main()
 	while (!file.eof())
 	{
 		if (packetlogger_read_packet(file, [&file_copy](packetlogger_header_t& header, uint8_t hci_packet_type, char* data) -> void {
-			
+
 			// if string type, output a string
-			if (hci_packet_type >= 0xFB) 
+			if (hci_packet_type >= 0xFB)
 			{
 				std::string s(data, (header.len - 9));
 				std::cout << s << std::endl;
@@ -5225,7 +5235,7 @@ int main()
 			}
 			std::cout << std::dec << std::endl << std::endl;
 
-			if (hci_packet_type < 0xFB) 
+			if (hci_packet_type < 0xFB)
 			{
 				// header = length + timestamp
 				file_copy.write(reinterpret_cast<char *>(&header.len), sizeof(header.len));
@@ -5289,9 +5299,9 @@ int main()
 	reset_pcap_hdr_t(pcap_hdr);
 
 	// magic_number: used to detect the file format itself and the byte ordering.
-	// The writing application writes 0xa1b2c3d4 with it's native byte ordering 
-	// format into this field. The reading application will read either 0xa1b2c3d4 
-	// (identical) or 0xd4c3b2a1 (swapped). If the reading application reads the 
+	// The writing application writes 0xa1b2c3d4 with it's native byte ordering
+	// format into this field. The reading application will read either 0xa1b2c3d4
+	// (identical) or 0xd4c3b2a1 (swapped). If the reading application reads the
 	// swapped 0xd4c3b2a1 value, it knows that all the following fields will have to be swapped too.
 	file.read(reinterpret_cast<char *>(&pcap_hdr.magic_number), sizeof(pcap_hdr.magic_number));
 	if (pcap_hdr.magic_number != 2712847316U)
@@ -5308,21 +5318,21 @@ int main()
 
 	// thiszone: the correction time in seconds between GMT (UTC) and the local timezone of
 	// the following packet header timestamps. Examples: If the timestamps are in GMT (UTC),
-	// thiszone is simply 0. If the timestamps are in Central European time (Amsterdam, Berlin, …) 
-	// which is GMT + 1:00, thiszone must be -3600. In practice, time stamps are always in GMT, 
+	// thiszone is simply 0. If the timestamps are in Central European time (Amsterdam, Berlin, …)
+	// which is GMT + 1:00, thiszone must be -3600. In practice, time stamps are always in GMT,
 	// so thiszone is always 0.
 	file.read(reinterpret_cast<char *>(&pcap_hdr.thiszone), sizeof(pcap_hdr.thiszone));
 
 	// sigfigs: in theory, the accuracy of time stamps in the capture; in practice, all tools set it to 0
 	file.read(reinterpret_cast<char *>(&pcap_hdr.sigfigs), sizeof(pcap_hdr.sigfigs));
 
-	// snaplen: the "snapshot length" for the capture (typically 65535 or even more, 
+	// snaplen: the "snapshot length" for the capture (typically 65535 or even more,
 	// but might be limited by the user), see: incl_len vs. orig_len below
 	file.read(reinterpret_cast<char *>(&pcap_hdr.snaplen), sizeof(pcap_hdr.snaplen));
 
-	// network: link - layer header type, specifying the type of headers at the beginning of 
-	// the packet(e.g. 1 for Ethernet, see tcpdump.org's link-layer header types page for details); 
-	// this can be various types such as 802.11, 802.11 with various radio information, PPP, 
+	// network: link - layer header type, specifying the type of headers at the beginning of
+	// the packet(e.g. 1 for Ethernet, see tcpdump.org's link-layer header types page for details);
+	// this can be various types such as 802.11, 802.11 with various radio information, PPP,
 	// Token Ring, FDDI, etc.
 	file.read(reinterpret_cast<char *>(&pcap_hdr.network), sizeof(pcap_hdr.network));
 
@@ -5367,7 +5377,7 @@ int main()
 
 		////std::vector<int8_t> data_as_vector;
 		//// read data
-		//for (int i = 0; i < pcaprec_hdr.incl_len; i++) 
+		//for (int i = 0; i < pcaprec_hdr.incl_len; i++)
 		//{
 		//	int8_t data;
 		//	file.read(reinterpret_cast<char *>(&data), sizeof(data));
@@ -5386,23 +5396,23 @@ int main()
 	file_copy.close();
 	*/
 
-/**/
-	/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
-	std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
-	if (!temp_file.is_open())
-	{
-		std::cout << "Could not open " << filename << std::endl;
-		return 0;
-	}
-	file = &temp_file;*/
+	/**/
+		/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
+		std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+		if (!temp_file.is_open())
+		{
+			std::cout << "Could not open " << filename << std::endl;
+			return 0;
+		}
+		file = &temp_file;*/
 
-//	std::cout << "libusb_init() ..." << std::endl;
+		//	std::cout << "libusb_init() ..." << std::endl;
 	int r = libusb_init(&context);
 	if (r < 0)
 	{
 		return r;
 	}
-//	std::cout << "libusb_init() done." << std::endl;
+	//	std::cout << "libusb_init() done." << std::endl;
 
 #if 1
 	libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
@@ -5411,7 +5421,7 @@ int main()
 
 	libusb_device **devs;
 
-//	std::cout << "libusb_get_device_list() ..." << std::endl;
+	//	std::cout << "libusb_get_device_list() ..." << std::endl;
 	ssize_t cnt = libusb_get_device_list(context, &devs);
 	if (cnt < 0) {
 		libusb_exit(context);
@@ -5419,7 +5429,7 @@ int main()
 
 		return (int)cnt;
 	}
-//	std::cout << "libusb_get_device_list() done." << std::endl;
+	//	std::cout << "libusb_get_device_list() done." << std::endl;
 
 	find_dev(devs);
 

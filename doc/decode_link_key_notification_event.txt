@@ -1,0 +1,62 @@
+
+== HCI Event 0x18 ==
+
+Link Key Notification Event
+
+18 17 AB 8A 0F A3 5F 70 BB 47 D2 3F DD F5 87 E8 EA 85 BB 96 E5 78 4F D7 04
+
+BLUETOOTH SPECIFICATION Version 4.0 [Vol 2] page 744 of 1114
+Host Controller Interface Functional Specification
+7.7.24  Link Key Notification Event
+
+Description: 
+
+The Link Key Notification event is used to indicate to the Host that a new Link 
+Key has been created for the connection with the device specified in 
+BD_ADDR. The Host can save this new Link Key in its own storage for future 
+use. Also, the Host can decided to store the Link Key in the BR/EDR Control-
+ler’s Link Key Storage by using the Write_Stored_Link_Key command. The 
+Key_Type event parameter informs the Host about which key type (combina-
+tion key, local unit key, or remote unit key, debug combination key, unauthenti-
+cated combination key, authenticated combination key or changed combination 
+key) that was used during pairing. If pairing with unit key is not supported, the 
+Host can for instance discard the key or disconnect the link.
+
+The combination key Key_Type is used when standard pairing was used. The 
+debug combination key Key_Type is used when Simple Pairing was used and 
+the debug public key is sent or received. The unauthenticated combination key 
+Key_Type is used when the Just Works Simple Pairing association model was 
+used. The authenticated combination key Key_Type is used when Simple Pair-
+ing was used and the Just Works association mode was not used. The 
+changed combination key Key_Type is used when the link key has been 
+changed using the Change Connection Link Key procedure and Simple Pairing 
+Mode is set to enabled. Note: It is the responsibility of the Host to remember 
+the Key_Type (combination, debug combination, unauthenticated combination, 
+or authenticated combination) prior to changing the link key.
+
+
+18 - event code: 0x18 == Link Key Notification Event
+
+17 - parameter total length in bytes (0x17 == 23d)
+
+AB 8A 0F A3 5F 70 - (6 byte) - BD_ADDR of the Device for which the new link key has been generated.
+
+BB 47 D2 3F DD F5 87 E8 EA 85 BB 96 E5 78 4F D7 - (16 byte) - Link Key for the associated BD_ADDR. 
+
+04 - Key_Type: 0x04 == Unauthenticated Combination Key (See Key Type Table below)
+
+=== Key Type table ===
+
+Value Parameter Description
+0x00 Combination Key
+0x01 Local Unit Key
+0x02 Remote Unit Key
+0x03 Debug Combination Key
+0x04 Unauthenticated Combination Key
+0x05 Authenticated Combination Key
+0x06 Changed Combination Key
+0x07-0xFF Reserved
+
+
+== HCI Event 0x08 ==
+08 04 00 0B 00 01

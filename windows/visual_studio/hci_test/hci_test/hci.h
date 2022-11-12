@@ -1,5 +1,15 @@
 #pragma once
 
+#ifndef _HCI_H_
+#define _HCI_H_
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <cstring>
+#include <map>
+#include <array>
+
 /**
  * packet types - used in BTstack and over the H4 UART interface
  */
@@ -67,6 +77,25 @@
 #define HCI_OPCODE_LOW(data) static_cast<uint8_t>(data & 0xFF)
 #define HCI_OPCODE_TO_ARRAY(data) { HCI_OPCODE_LOW(data), HCI_OPCODE_HIGH(data) }
 #define ARRAY_TO_UINT16(data) { static_cast<uint16_t>((data[0] << 8) + data[1]) }
+
+
+
+void *revmemcpy(uint8_t *dest, const uint8_t *src, size_t len);
+
+typedef std::array<uint8_t, 6> bd_addr;
+typedef std::array<uint8_t, 16> link_key;
+
+void clear_bd_addr(bd_addr& bd_addr);
+void read_bd_addr_from_array(bd_addr& target, uint8_t(&source)[6], uint8_t& index);
+void read_bd_addr(bd_addr& target, uint8_t* source, uint8_t& index);
+void write_bd_addr(uint8_t* target, bd_addr& source, uint8_t& index);
+void print_bd_addr(bd_addr& bd_addr);
+
+void clear_link_key(link_key& link_key);
+void read_link_key_from_array(link_key& target, uint8_t(&source)[16], uint8_t& index);
+void read_link_key(link_key& target, uint8_t* source, uint8_t& index);
+void write_link_key(uint8_t* target, link_key& source, uint8_t& index);
+void print_link_key(link_key& link_key);
 
 /**
  * compact HCI Command packet description
@@ -356,7 +385,7 @@ typedef enum e_hci_event_code
 	//Authenticated Payload Timeout Expired	0x57
 } e_hci_event_code_t;
 
-std::map<uint8_t, std::string> error_code_to_msg = {
+static const std::map<uint8_t, std::string> error_code_to_msg = {
 		//{"key1", {0xE2, 0x82, 0xAC}}
 	
 		{0x01, "Unknown HCI Command."},
@@ -404,10 +433,7 @@ std::map<uint8_t, std::string> error_code_to_msg = {
 		
 	};
 
-const char* hci_error_name(uint8_t error_id)
-{
-	return error_code_to_msg.at(error_id).c_str();
-}
+const char* hci_error_name(uint8_t error_id);
 
 /*
 https://github.com/nccgroup/BLE-Replay/blob/master/btsnoop/btsnoop/bt/l2cap.py
@@ -439,3 +465,5 @@ L2CAP_SCH_PDUS = {
 		0x16 : "LE SCH LE_Flow_Control_Credit",
 }
 */
+
+#endif // _HCI_H_

@@ -1,0 +1,11 @@
+- Learn how USB asynchronous works and how to reuse transfers
+- Parser for HCI events
+- Parser for HCI commands
+- Factories for creating HCI events and commands
+- C++ async await for responses to commands
+- L2CAP channel management system (creating and placing messages that arrive on the correct channel)
+- More modular design
+- Driver Layer for a ASUS USB-BT400 driver and other drivers for other devices
+- UI for logging packets to
+- Better file closeing for the packet logger files
+- unit tests

@@ -1,0 +1,136 @@
+== Request Configure MTU ==
+
+03 0b 20 10 00 0c 00 01 00 04 05 08 00 41 00 00 00 01 02 00 04
+
+
+-- Packet Logger
+03 - Receive ACL Data (0x03)
+
+-- Bluetooth HCI ACL Packet
+0B 20 - ACL header / Connection Handle
+10 00 - Total length of data that follows, starting here
+
+-- Bluetooth L2CAP protocol
+0C 00 - length of L2CAP command data
+01 00 - signaling channel
+
+-- L2CAP command data: configure request
+04 - command code - (configure request = 0x04)
+05 - command identifier 
+08 00 - command length
+41 00 - Destination Channel ID (CID) - this is the channel ????
+00 00 - reserve bits + Continuation Flag
+
+-- configure option
+01 (Maximum Transmission Unit 0x01 (MTU))
+02 Length 2
+00 04 (MTU in bytes 0x0400 == 1024d)
+
+
+== Response Configure MTU ==
+
+02 0b 00 12 00 0e 00 01 00 05 05 0a 00 4d 00 00 00 00 00 01 02 00 04
+
+-- Packet Logger
+02 - Send ACL Data (0x02)
+
+-- Bluetooth HCI ACL Packet
+0b 00 - ACL header / Connection Handle
+12 00 - Total length of data that follows, starting here
+
+-- Bluetooth L2CAP protocol
+0e 00 - length of L2CAP command data
+01 00 - signaling channel
+
+-- L2CAP command data: configure request
+05 - command code - (configure response = 0x05)
+05 - command identifier 
+0a 00 - command length 
+4d 00 - Destination Channel ID (CID) - this is the channel ???? 
+00 00 - reserve bits + Continuation Flag
+00 00 - success
+
+-- configure option
+01 - (Maximum Transmission Unit 0x01 (MTU)) 
+02 - Length 2
+00 04 - (MTU in bytes 0x0400 == 1024d)
+
+
+
+
+
+
+
+
+
+
+== Send configure response ==
+
+//unsigned char buffer[1024];
+for (int i = 0; i < 1024; i++) {
+	buffer[i] = 0x00;
+}
+
+//int idx = 0;
+idx = 0;
+
+// connection handle
+buffer[idx++] = 0x0b;
+buffer[idx++] = 0x00;
+//buffer[idx++] = 0x20;
+
+// data total length (2 Byte)
+buffer[idx++] = 0x12;
+buffer[idx++] = 0x00;
+
+// length of lcap packet (2 Byte)
+buffer[idx++] = 0x0e;
+buffer[idx++] = 0x00;
+
+// signaling channel (2 Byte) 0x0001
+buffer[idx++] = 0x01;
+buffer[idx++] = 0x00;
+
+// command code (1 Byte) - configure response (0x05)
+buffer[idx++] = 0x05;
+
+// command identifier (1 Byte)
+buffer[idx++] = l2cap_command_identifier;
+
+// command length (2 byte)
+buffer[idx++] = 0x0a;
+buffer[idx++] = 0x00;
+
+// destination CID 
+//buffer[idx++] = 0x4d;
+//buffer[idx++] = 0x00;
+//buffer[idx++] = l2cap_source_cid_lower;
+//buffer[idx++] = l2cap_source_cid_upper;
+//buffer[idx++] = l2cap_source_cid_upper;
+//buffer[idx++] = l2cap_source_cid_lower;
+
+// source CID
+buffer[idx++] = 0x40;
+buffer[idx++] = 0x00;
+//buffer[idx++] = l2cap_source_cid_lower;
+//buffer[idx++] = l2cap_source_cid_upper;
+
+// reserved + continuation flag
+buffer[idx++] = 0x00;
+buffer[idx++] = 0x00;
+
+// result success
+buffer[idx++] = 0x00;
+buffer[idx++] = 0x00;
+
+// Option
+buffer[idx++] = 0x01; // option MTU (0x01)
+buffer[idx++] = 0x02; // length
+
+// OPTION MTU value (0x0004 == 0x0400 == 1024d)
+/*buffer[idx++] = 0x00;
+buffer[idx++] = 0x04;*/
+
+// option value
+buffer[idx++] = transfer->buffer[18];
+buffer[idx++] = transfer->buffer[19];

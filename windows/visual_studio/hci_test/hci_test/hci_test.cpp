@@ -16,6 +16,14 @@
 #include <intrin.h>
 
 #include "sdp.h"
+#include "link_key_database.h"
+
+#include "l2cap.h"
+
+LinkKeyDatabase link_key_database;
+
+uint16_t next_destination_channel_id = 0;
+std::map<uint16_t, channel_pair> channel_map;
 
 bool authentication_request = false;
 bool mtu_config_request_received = false;
@@ -404,7 +412,7 @@ static int scan_for_bt_endpoints(libusb_device *dev)
 
 uint8_t l2cap_source_cid_lower = 0;
 uint8_t l2cap_source_cid_upper = 0;
-uint8_t l2cap_source_cid = 0;
+uint16_t l2cap_source_cid = 0;
 
 uint8_t l2cap_command_identifier = 0;
 
@@ -499,6 +507,45 @@ void dump_hci_event(struct libusb_transfer* transfer)
 	switch (event_code)
 	{
 
+	case 0x18:
+	{
+		printf("Link Key Notification Event\n");
+
+		// parameter total length
+		parameter_total_length = transfer->buffer[idx++];
+		printf("parameter_total_length: 0x%02x\n", parameter_total_length);
+
+		// BD Addr to which this key belongs to
+		bd_addr bd_addr;
+		read_bd_addr(bd_addr, transfer->buffer, idx);
+
+		// DEBUG print the address
+		printf("Link Key Notification Event - BD ADDR: ");
+		print_bd_addr(bd_addr);
+		printf("\n");
+
+		link_key link_key;
+		read_link_key(link_key, transfer->buffer, idx);
+
+		// DEBUG print the address
+		printf("Link Key Notification Event - LINK KEY: ");
+		print_link_key(link_key);
+		printf("\n");
+
+		link_key_database.add(bd_addr, link_key);
+
+		link_key_database.store_to_file("link_key_database.lkd");
+	}
+	break;
+
+	case 0x38:
+	{
+		printf("Link Supervision Timeout Changed Event\n");
+
+		//throw 1;
+	}
+	break;
+
 	case 0x13:
 		printf("Number of completed packets\n");
 
@@ -544,6 +591,10 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		printf("NOTICE: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		printf("\n");
 
+		// BD Addr to which this key belongs to
+		bd_addr bd_addr;
+		read_bd_addr(bd_addr, transfer->buffer, idx);
+
 		// Request:
 		// 	333	13509.000000	controller		host		HCI_EVT	9	Rcvd Link Key Request
 
@@ -556,36 +607,84 @@ void dump_hci_event(struct libusb_transfer* transfer)
 		// 
 		// Since no Link Key was exchanged (at least not that I know of), 
 		// a Link Key Request Negative Reply is sent as a response to the link key request
+		//
+		// Not true: The link key is sent via a event of type: "Link key notification Event"
 
-		// 00 0c 04 06 ab 8a 0f a3 5f 70
-		unsigned char buffer[1024];
-		for (int i = 0; i < 1024; ++i) {
-			buffer[i] = 0x00;
+		// either send the key or send a "Link Key Request Negative Reply"
+		if (link_key_database.contains(bd_addr))
+		{
+			// send the key
+			link_key link_key = link_key_database.retrieve(bd_addr);
+
+			// send "7.1.10 Link Key Request Reply Command"
+
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; ++i) {
+				buffer[i] = 0x00;
+			}
+
+			uint8_t idx = 0;
+
+			// command opcode
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x04;
+
+			// total length
+			buffer[idx++] = 0x06 + 0x0a;
+
+			// BD_ADDR - (6 byte) - Destination address: 70:5F:A3:0F:8A:AB
+			// address of the partner that wants to connect and for which a link key is required
+			/*buffer[idx++] = 0xAB;
+			buffer[idx++] = 0x8A;
+			buffer[idx++] = 0x0F;
+			buffer[idx++] = 0xA3;
+			buffer[idx++] = 0x5F;
+			buffer[idx++] = 0x70;*/
+			write_bd_addr(buffer, bd_addr, idx);
+
+			// link key (16 byte)
+			write_link_key(buffer, link_key, idx);
+
+			Sleep(wait);
+			usb_send_cmd_packet(buffer, idx);
+
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+		} 
+		else
+		{
+			// send "Link Key Request Negative Reply"
+
+			// 00 0c 04 06 ab 8a 0f a3 5f 70
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; ++i) {
+				buffer[i] = 0x00;
+			}
+
+			int idx = 0;
+
+			// command opcode
+			buffer[idx++] = 0x0c;
+			buffer[idx++] = 0x04;
+
+			// total length
+			buffer[idx++] = 0x06;
+
+			// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
+			// address of the partner that wants to connect and for which a link key is required
+			buffer[idx++] = 0xAB;
+			buffer[idx++] = 0x8A;
+			buffer[idx++] = 0x0F;
+			buffer[idx++] = 0xA3;
+			buffer[idx++] = 0x5F;
+			buffer[idx++] = 0x70;
+
+			Sleep(wait);
+			usb_send_cmd_packet(buffer, idx);
+
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 		}
-
-		int idx = 0;
-
-		// command opcode
-		buffer[idx++] = 0x0c;
-		buffer[idx++] = 0x04;
-
-		// total length
-		buffer[idx++] = 0x06;
-
-		// BD_ADDR - Destination address: 70:5F:A3:0F:8A:AB
-		buffer[idx++] = 0xAB;
-		buffer[idx++] = 0x8A;
-		buffer[idx++] = 0x0F;
-		buffer[idx++] = 0xA3;
-		buffer[idx++] = 0x5F;
-		buffer[idx++] = 0x70;
-
-		Sleep(wait);
-		usb_send_cmd_packet(buffer, idx);
-
-		//bool is_sent = true;
-		//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
-		write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
 	}
 	break;
 
@@ -1822,6 +1921,871 @@ void print_transfer_status(struct libusb_transfer *lut)
 	}
 }
 
+void process_sdp(uint8_t& idx, uint16_t& l2cap_length, struct libusb_transfer *transfer)
+{
+	// there is no real channel management yet! 
+	// The fake code 0x0041 is for the SDP channel!
+
+	// The channel knows via it's PSM assigned during connection which
+	// protocol is exchanged over it!
+
+	// channel 0x0041 is a simulated SDP channel, so perform SDP channel parsing!
+
+	// connection handle: 2 byte
+	// total length: 2 byte
+	// l2cap length: 2 byte
+	// channel ID: 2 byte
+	//uint8_t sdp_start_index = 2 + 2 + 2 + 2;
+	uint8_t sdp_start_index = idx;
+	uint16_t sdp_length = l2cap_length;
+
+	// DEBUG dump packet
+	for (int i = sdp_start_index; i < sdp_start_index + sdp_length; i++)
+	{
+		std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(transfer->buffer[i] & 0xFF) << " ";
+	}
+	std::cout << std::dec << std::endl << std::endl;
+
+	// what type of SDP command this request is 
+	uint8_t sdp_pdu = transfer->buffer[idx++];
+	switch (sdp_pdu) {
+
+	case 0x06:
+	{
+		uint16_t sdp_transaction_id = 0x0000;
+
+		sdpServiceSearchAttributeRequest(transfer->buffer, idx, sdp_transaction_id);
+
+		std::array<uint8_t, 256> target = { 0 };
+		auto bytes_created = sdpServiceSearchAttributeResponse(target);
+
+		// DEBUG output hex stream
+		for (int i = 0; i < bytes_created; i++)
+		{
+			std::cout << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(target.at(i)) << " ";
+			if ((i > 0) && ((i + 1) % 16 == 0))
+			{
+				std::cout << std::endl;
+			}
+		}
+		std::cout << std::endl;
+
+		//
+		// Send the response
+		//
+
+		uint8_t buffer[1024];
+		for (int i = 0; i < 1024; i++) {
+			buffer[i] = 0x00;
+		}
+
+		idx = 0;
+
+		//
+		// HCI ACL Packet
+		//
+
+		// ACL header / connection handle
+		buffer[idx++] = 0x0b;
+		buffer[idx++] = 0x20;
+
+		// length_of_sdp_packet is computed from:
+		//
+		// PDU (1 byte)
+		// transaction id (2 byte)
+		// parameter length (2 byte)
+		// attribute list byte count (2 byte)
+		// data element data
+		// continuation state (1 byte)
+		uint16_t length_of_sdp_packet = 1 + 2 + 2 + 2 + bytes_created + 1;
+
+		// data total length (2 Byte)
+		buffer[idx++] = 2 + 2 + length_of_sdp_packet; // here this is the length of the following L2CAP packet
+		buffer[idx++] = 0x00; // TODO
+
+		//
+		// L2CAP Packet
+		//
+
+		// length of SDP packet (2 Byte)			
+		buffer[idx++] = (length_of_sdp_packet >> 0) & 0xFF;
+		buffer[idx++] = (length_of_sdp_packet >> 8) & 0xFF;
+
+		// CID of communication partner (2 byte)
+		buffer[idx++] = l2cap_source_cid_lower;
+		buffer[idx++] = l2cap_source_cid_upper;
+
+		// 
+		// SDP Packet
+		// 
+
+		// PDU aka. command code (1 Byte) - Service Search Attribute Response (0x07)
+		buffer[idx++] = 0x07;
+
+		// transaction id (2 byte)			
+		buffer[idx++] = (sdp_transaction_id >> 8) & 0xFF;
+		buffer[idx++] = (sdp_transaction_id >> 0) & 0xFF;
+
+		// parameter length (2 byte) - amount of ????????????????
+		// Core_V4.0 specification
+		// BLUETOOTH SPECIFICATION Version 4.0 [Vol 3] page 224 of 656
+		// Service Discovery Protocol(SDP) Specification
+		buffer[idx++] = ((bytes_created + 3) >> 8) & 0xFF;
+		buffer[idx++] = ((bytes_created + 3) >> 0) & 0xFF;
+
+		// attribute list byte count (2 byte) - amount of data bytes in the binary data
+		buffer[idx++] = (bytes_created >> 8) & 0xFF;
+		buffer[idx++] = (bytes_created >> 0) & 0xFF;
+
+		// data
+		for (int i = 0; i < bytes_created; i++)
+		{
+			buffer[idx++] = target.at(i);
+		}
+
+		// continuation state
+		buffer[idx++] = 0x00;
+
+		Sleep(wait);
+		usb_send_acl_packet(buffer, idx);
+
+		// dump the outgoing packet into the .pcap file
+		//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+		//submit(transfer);
+	}
+	break;
+
+	default:
+		printf("Unknown Service Discovery Protocol (SDP) Protocol Data Unit (PDU): 0x%02x\n", sdp_pdu);
+		break;
+	}
+}
+
+void process_control(uint8_t& idx, uint16_t& l2cap_length, struct libusb_transfer *transfer)
+{
+	//
+	// L2CAP command data
+	//
+
+	uint8_t l2cap_command_code = 0;
+
+	uint8_t l2cap_information_type_lower = 0;
+	uint8_t l2cap_information_type_upper = 0;
+	uint16_t l2cap_information_type = 0;
+
+	uint8_t l2cap_command_length_lower = 0;
+	uint8_t l2cap_command_length_upper = 0;
+	uint16_t l2cap_command_length = 0;
+
+	l2cap_command_code = transfer->buffer[idx++];
+	printf("l2cap_command_code: 0x%02x\n", l2cap_command_code);
+
+	l2cap_command_identifier = transfer->buffer[idx++];
+	printf("l2cap_command_identifier: 0x%02x\n", l2cap_command_identifier);
+
+	l2cap_command_length_lower = transfer->buffer[idx++];
+	l2cap_command_length_upper = transfer->buffer[idx++];
+	l2cap_command_length = (l2cap_command_length_upper << 8) + l2cap_command_length_lower;
+	printf("l2cap_command_length: 0x%04x\n", l2cap_command_length);
+
+	switch (l2cap_command_code) {
+
+	case 0x01:
+		printf("l2cap_command_code: command reject!\n");
+		break;
+
+	case 0x02:
+	{
+		printf("l2cap_command_code: connection request\n");
+
+		// information type - Protocol Service Multiplexer
+		//
+		// This field contains a code of the protocol that should 
+		// be run over this channel
+		l2cap_information_type_lower = transfer->buffer[idx++];
+		l2cap_information_type_upper = transfer->buffer[idx++];
+		l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
+		printf("PSM SDP: 0x%04x\n", l2cap_information_type);
+
+		// this is the channel id (CID) that the communication partner
+		// wants to receive answers
+		l2cap_source_cid_lower = transfer->buffer[idx++];
+		l2cap_source_cid_upper = transfer->buffer[idx++];
+		l2cap_source_cid = (l2cap_source_cid_upper << 8) + l2cap_source_cid_lower;
+		printf("l2cap_source_cid: 0x%04x\n", l2cap_source_cid);
+
+		// response
+
+		// 02 2a 20 10 00 0c 00 01 00 03 01 08 00 40 00 40 00 00 00 00 00
+
+		uint8_t buffer[1024];
+		for (int i = 0; i < 1024; i++) {
+			buffer[i] = 0x00;
+		}
+
+		idx = 0;
+
+		// ACL header / connection handle
+		buffer[idx++] = 0x0b;
+		//buffer[idx++] = 0x00;
+		buffer[idx++] = 0x20;
+
+		// data total length (2 Byte)
+		buffer[idx++] = 0x10;
+		buffer[idx++] = 0x00;
+
+		// length of l2cap packet (2 Byte)
+		buffer[idx++] = 0x0c;
+		buffer[idx++] = 0x00;
+
+		// signaling channel (2 Byte) 0x0001
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x00;
+
+		// command code (1 Byte) - connection response (0x03)
+		buffer[idx++] = 0x03;
+
+		// command identifier (1 Byte)
+		buffer[idx++] = l2cap_command_identifier;
+
+		// command length (2 byte)
+		buffer[idx++] = 0x08;
+		buffer[idx++] = 0x00;
+
+		// destination CID - this is the generated channel id
+		// of the new channel on this side of the communication
+		next_destination_channel_id++;
+		buffer[idx++] = 0x40 + next_destination_channel_id;
+		buffer[idx++] = 0x00;
+
+		channel_pair cpair;
+		cpair.destination_cid = 0x40 + next_destination_channel_id;
+		cpair.source_cid = l2cap_source_cid;
+		cpair.psm = l2cap_information_type;
+
+		channel_map.insert({ cpair.destination_cid, cpair });
+
+		// source CID - own source Channel ID (CID)
+		buffer[idx++] = l2cap_source_cid_lower;
+		buffer[idx++] = l2cap_source_cid_upper;
+
+		// result success
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		// status (0x0000 = no further information available)
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		Sleep(wait);
+		usb_send_acl_packet(buffer, idx);
+
+		// dump the outgoing packet into the .pcap file
+		//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+		// do we really need to submit the transfer?
+		submit(transfer);
+
+
+		////
+		//// Send configure request for MTU
+		////
+
+		//// configure request
+
+		//for (int i = 0; i < 1024; i++) {
+		//	buffer[i] = 0x00;
+		//}
+
+		//idx = 0;
+
+		//// connection handle
+		//buffer[idx++] = 0x0b;
+		//buffer[idx++] = 0x00;
+
+		//// data total length (2 Byte)
+		//buffer[idx++] = 0x10;
+		//buffer[idx++] = 0x00;
+
+		//// length of lcap packet (2 Byte)
+		//buffer[idx++] = 0x0c;
+		//buffer[idx++] = 0x00;
+
+		//// signaling channel (2 Byte) 0x0001
+		//buffer[idx++] = 0x01;
+		//buffer[idx++] = 0x00;
+
+		//// command code (1 Byte) - configure request (0x04)
+		//buffer[idx++] = 0x04;
+
+		//// command identifier (1 Byte)
+		//buffer[idx++] = static_cast<uint8_t>(l2cap_command_identifier + 1);
+
+		//// command length (2 byte)
+		//buffer[idx++] = 0x08;
+		//buffer[idx++] = 0x00;
+
+		//// destination CID 
+		////buffer[idx++] = 0x40;
+		////buffer[idx++] = 0x00;
+		//buffer[idx++] = l2cap_source_cid_lower;
+		//buffer[idx++] = l2cap_source_cid_upper;
+		////buffer[idx++] = l2cap_source_cid_upper;
+		////buffer[idx++] = l2cap_source_cid_lower;
+
+		//// source CID
+		//// buffer[idx++] = 0x40;
+		//// buffer[idx++] = 0x00;
+		////buffer[idx++] = l2cap_source_cid_lower;
+		////buffer[idx++] = l2cap_source_cid_upper;
+
+		//// reserved + continuation flag
+		//buffer[idx++] = 0x00;
+		//buffer[idx++] = 0x00;
+
+		//// Option
+		//buffer[idx++] = 0x01; // option MTU (0x01)
+		//buffer[idx++] = 0x02; // length
+
+		//// OPTION MTU value (1691)
+		////buffer[idx++] = 0x9b;
+		////buffer[idx++] = 0x06;
+
+		//buffer[idx++] = 0x00;
+		//buffer[idx++] = 0x04;
+
+		//Sleep(wait);
+		//usb_send_acl_packet(buffer, idx);
+
+		//// dump the packet into the .pcap file
+		////write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
+		//write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+		//submit(transfer);
+
+	}
+	break;
+
+	case 0x04: // Configure request
+	{
+		printf("CONFIGURE REQUEST! 0x04 \n\n\n");
+
+		mtu_config_request_received = true;
+		mtu_config_request_command_identifier = l2cap_command_identifier;
+
+		// response to configure request MTU
+		// 0b 00 12 00 0e 00 01 00 05 05 0a 00 4d 00 00 00 00 00 01 02 00 04
+
+		// ACL header
+		// 0b 00 - connection handle
+		// 12 00 - data total length
+
+		// L2CAP protocol
+		// 0e 00 - length
+		// 01 00 - signaling channel
+
+		// command
+		// 05 - command code (configure response == 0x05)
+		// 05 - command identifier
+		// 0a 00 - command length
+
+		// 4d 00 - destination channel
+		// 00 00 - reserved + continuation			
+		// 00 00 - success
+
+		// 01 02 00 04 - option
+
+		//unsigned char buffer[1024];
+		for (int i = 0; i < 1024; i++) {
+			buffer[i] = 0x00;
+		}
+
+		//int idx = 0;
+		idx = 0;
+
+		// Send configure response
+
+		//// ACL header
+		//buffer[idx++] = 0x0b;
+		//buffer[idx++] = 0x00;
+
+		//// data total length (2 Byte)
+		//buffer[idx++] = 0x12;
+		//buffer[idx++] = 0x00;
+
+		//// length of lcap packet (2 Byte)
+		//buffer[idx++] = 0x0e;
+		//buffer[idx++] = 0x00;
+
+		//// signaling channel (2 Byte) 0x0001
+		//buffer[idx++] = 0x01;
+		//buffer[idx++] = 0x00;
+
+		//// command code (1 Byte) - configure response (0x05)
+		//buffer[idx++] = 0x05;
+
+		//// command identifier (1 Byte)
+		//buffer[idx++] = l2cap_command_identifier;
+
+		//// command length (2 byte)
+		//buffer[idx++] = 0x0a;
+		//buffer[idx++] = 0x00;
+
+		//// destination CID 
+		////buffer[idx++] = 0x4d;
+		////buffer[idx++] = 0x00;
+		////buffer[idx++] = l2cap_source_cid_lower;
+		////buffer[idx++] = l2cap_source_cid_upper;
+		////buffer[idx++] = l2cap_source_cid_upper;
+		////buffer[idx++] = l2cap_source_cid_lower;
+
+		//// source CID
+		//buffer[idx++] = 0x4e;
+		//buffer[idx++] = 0x00;
+		////buffer[idx++] = l2cap_source_cid_lower;
+		////buffer[idx++] = l2cap_source_cid_upper;
+
+		//// reserved + continuation flag
+		//buffer[idx++] = 0x00;
+		//buffer[idx++] = 0x00;
+
+		//// result success
+		//buffer[idx++] = 0x00;
+		//buffer[idx++] = 0x00;
+
+		//// Option
+		//buffer[idx++] = 0x01; // option MTU (0x01)
+		//buffer[idx++] = 0x02; // length
+
+		//// OPTION MTU value (0x0004 == 0x0400 == 1024d)
+		////buffer[idx++] = 0x00;
+		////buffer[idx++] = 0x04;
+
+		//buffer[idx++] = transfer->buffer[18];
+		//buffer[idx++] = transfer->buffer[19];
+
+		// Send configure response
+
+		// connection handle
+		buffer[idx++] = 0x0b;
+		buffer[idx++] = 0x00;
+		//buffer[idx++] = 0x20;
+
+		// data total length (2 Byte)
+		buffer[idx++] = 0x12;
+		buffer[idx++] = 0x00;
+
+		// length of lcap packet (2 Byte)
+		buffer[idx++] = 0x0e;
+		buffer[idx++] = 0x00;
+
+		// signaling channel (2 Byte) 0x0001
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x00;
+
+		// command code (1 Byte) - configure response (0x05)
+		buffer[idx++] = 0x05;
+
+		// command identifier (1 Byte)
+		buffer[idx++] = l2cap_command_identifier;
+
+		// command length (2 byte)
+		buffer[idx++] = 0x0a;
+		buffer[idx++] = 0x00;
+
+		// destination CID 
+		//buffer[idx++] = 0x4d;
+		//buffer[idx++] = 0x00;
+		//buffer[idx++] = l2cap_source_cid_lower;
+		//buffer[idx++] = l2cap_source_cid_upper;
+		//buffer[idx++] = l2cap_source_cid_upper;
+		//buffer[idx++] = l2cap_source_cid_lower;
+
+		// source CID
+		buffer[idx++] = 0x40;
+		buffer[idx++] = 0x00;
+		//buffer[idx++] = l2cap_source_cid_lower;
+		//buffer[idx++] = l2cap_source_cid_upper;
+
+		// reserved + continuation flag
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		// result success
+		buffer[idx++] = 0x00;
+		buffer[idx++] = 0x00;
+
+		// Option
+		buffer[idx++] = 0x01; // option MTU (0x01)
+		buffer[idx++] = 0x02; // length
+
+		// OPTION MTU value (0x0004 == 0x0400 == 1024d)
+		/*buffer[idx++] = 0x00;
+		buffer[idx++] = 0x04;*/
+
+		// option value
+		buffer[idx++] = transfer->buffer[18];
+		buffer[idx++] = transfer->buffer[19];
+
+		//Sleep(wait);
+
+		//if (LIBUSB_SUCCESS != usb_send_acl_packet(buffer, idx)) {
+		//	throw "Cannot send ACL packet!";
+		//}
+		////usb_send_cmd_packet(buffer, idx);
+
+		//// dump the outgoing packet into the .pcap file
+		////write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_asynchronous_data, idx, buffer);
+		//write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+		//submit(transfer);
+	}
+	break;
+
+	case 0x06: // disconnect request
+	{
+		printf("l2cap_command_code: disconnect request\n");
+
+		authentication_request = false;
+
+		uint8_t l2cap_destination_cid_lower = transfer->buffer[idx++];
+		uint8_t l2cap_destination_cid_upper = transfer->buffer[idx++];
+		uint8_t l2cap_destination_cid = (l2cap_destination_cid_upper << 8) + l2cap_destination_cid_lower;
+		printf("PSM SDP (== l2cap_information_type): 0x%04x\n", l2cap_information_type);
+
+		l2cap_source_cid_lower = transfer->buffer[idx++];
+		l2cap_source_cid_upper = transfer->buffer[idx++];
+		l2cap_source_cid = (l2cap_source_cid_upper << 8) + l2cap_source_cid_lower;
+		printf("l2cap_source_cid: 0x%04x\n", l2cap_source_cid);
+
+		// disconnect response
+		// 0b 00 0c 00 08 00 01 00 07 06 04 00 41 00 4d 00
+
+		unsigned char buffer[1024];
+		for (int i = 0; i < 1024; i++) {
+			buffer[i] = 0x00;
+		}
+
+		int idx = 0;
+
+		// ACL header
+		buffer[idx++] = 0x0b;
+		buffer[idx++] = 0x00;
+
+		// data total length (2 Byte)
+		buffer[idx++] = 0x0c;
+		buffer[idx++] = 0x00;
+
+		// length of lcap packet (2 Byte)
+		buffer[idx++] = 0x08;
+		buffer[idx++] = 0x00;
+
+		// signaling channel (2 Byte) 0x0001
+		buffer[idx++] = 0x01;
+		buffer[idx++] = 0x00;
+
+		// command code (1 Byte) - disconnect response (0x07)
+		buffer[idx++] = 0x07;
+
+		// command identifier (1 Byte)
+		buffer[idx++] = l2cap_command_identifier;
+
+		// command length (2 byte)
+		buffer[idx++] = 0x04;
+		buffer[idx++] = 0x00;
+
+		// destination CID 
+		//buffer[idx++] = 0x4d;
+		//buffer[idx++] = 0x00;
+		buffer[idx++] = l2cap_destination_cid_lower;
+		buffer[idx++] = l2cap_destination_cid_upper;
+		//buffer[idx++] = l2cap_source_cid_upper;
+		//buffer[idx++] = l2cap_source_cid_lower;
+
+		// source CID
+		//buffer[idx++] = 0x40;
+		//buffer[idx++] = 0x00;
+		buffer[idx++] = l2cap_source_cid_lower;
+		buffer[idx++] = l2cap_source_cid_upper;
+
+		Sleep(wait);
+		usb_send_acl_packet(buffer, idx);
+
+		// dump the outgoing packet into the .pcap file
+		//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_asynchronous_data, idx, buffer);
+		write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+		// close the file
+		//file.flush();
+		//file.close();
+
+		submit(transfer);
+	}
+	break;
+
+	case 0x0A:
+	{
+		// L2CAP - information request
+		printf("l2cap_command_code: information request ...\n");
+
+		// response
+		// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
+		// 0b 00 10 00 0c 00 01 00 0b 02 08 00 02 00 00 00 80 02 00 00
+
+		// information type
+		l2cap_information_type_lower = transfer->buffer[idx++];
+		l2cap_information_type_upper = transfer->buffer[idx++];
+		l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
+		printf("l2cap_information_type: 0x%04x\n", l2cap_information_type);
+
+		if (l2cap_information_type == 0x02)
+		{
+			printf("l2cap_command_code: Send a response to the \"configure request - extended features mask\"\n");
+
+			uint8_t buffer[1024];
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			idx = 0;
+
+			// connection handle
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			// data total length
+			buffer[idx++] = 0x10;
+			buffer[idx++] = 0x00;
+
+			// L2CAP protocol length
+			buffer[idx++] = 0x0c;
+			buffer[idx++] = 0x00;
+
+			// L2CAP signaling channel
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+
+			// command code (0x0b = information respone)
+			buffer[idx++] = 0x0b;
+
+			// command identifier (correlation id between request and response)
+			buffer[idx++] = l2cap_command_identifier;
+
+			// command length
+			buffer[idx++] = 0x08;
+			buffer[idx++] = 0x00;
+
+			// information type: (0x0002 = extended feature mask)
+			buffer[idx++] = 0x02;
+			buffer[idx++] = 0x00;
+
+			// result: (0x0000 = success)
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			// features enhRetransmission ??????????????? What!?!
+			//buffer[idx++] = 0xa8;
+			buffer[idx++] = 0x80;
+			buffer[idx++] = 0x02;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			// write the outgoing packet into the log file
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+			submit(transfer);
+		}
+		else if (l2cap_information_type == 0x03)
+		{
+			// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
+
+			uint8_t buffer[1024];
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			idx = 0;
+
+			// header
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			// data total length
+			buffer[idx++] = 0x14;
+			buffer[idx++] = 0x00;
+
+			// L2CAP protocol length
+			buffer[idx++] = 0x10;
+			buffer[idx++] = 0x00;
+
+			// L2CAP signaling channel
+			buffer[idx++] = 0x01;
+			buffer[idx++] = 0x00;
+
+			// command code (0x0b = information respone)
+			buffer[idx++] = 0x0b;
+
+			// command identifier (correlation id between request and response)
+			buffer[idx++] = l2cap_command_identifier;
+
+			// command length
+			buffer[idx++] = 0x0c;
+			buffer[idx++] = 0x00;
+
+			// information type: (0x0003 = fixed channel support)
+			buffer[idx++] = 0x03;
+			buffer[idx++] = 0x00;
+
+			// result: (0x0000 = success)
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			// feartures enhRetransmission ??????????????? What!?!
+			buffer[idx++] = 0x06;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+			buffer[idx++] = 0x00;
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+			submit(transfer);
+		}
+		//else if (l2cap_information_type == 0x04) 
+		//{
+		//	printf("l2cap_command_code: configure request\n");
+
+		//	// this does not parse as l2cap packet!
+		//	//bool is_sent = false;
+		//	//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+		//}
+
+		/*
+				  for (int i = 0; i < 1024; i++) {
+					buffer[i] = 0x00;
+				  }
+
+				  idx = 0;
+				  buffer[idx++] = 0x0b;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x14;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x10;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x01;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x0b;
+				  buffer[idx++] = 0x03;
+				  buffer[idx++] = 0x0c;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x03;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x06;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+				  buffer[idx++] = 0x00;
+
+				  usleep(wait * 1000);
+				  usb_send_cmd_packet(buffer, idx);
+
+				  //bool is_sent = false
+				  write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, idx, buffer);
+
+				  submit(transfer);
+		*/
+	}
+	break;
+
+	case 0x0B:
+	{
+		// L2CAP - information response
+		printf("l2cap_command_code: information response ...\n");
+	}
+	break;
+
+	case 0xCC:
+	{
+		if (!authentication_request)
+		{
+			authentication_request = true;
+			printf("Starting simple pairing using HCI_Authentication_Requested !\n");
+
+			printf("\n\n\n");
+
+			//
+			// HCI command - Send "HCI_Write_Inquiry_Mode" command
+			//
+
+			printf(">>> HCI command - Send \"HCI_Write_Inquiry_Mode\" command\n");
+
+			unsigned char buffer[1024];
+			for (int i = 0; i < 1024; ++i) {
+				buffer[i] = 0x00;
+			}
+
+			// 7.1.15  Authentication Requested Command
+
+			int idx = 0;
+
+			// opcode 
+			buffer[idx++] = 0x11;
+			//buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x00;
+
+			//buffer[idx++] = 0x0b;
+			//buffer[idx++] = 0x11;
+
+			buffer[idx++] = 0x00;
+
+			Sleep(wait);
+			usb_send_cmd_packet(buffer, idx);
+
+			//bool is_sent = true;
+			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
+
+			submit(transfer);
+
+			//libusb_handle_events(context);
+
+			//file.close();
+			//file.flush();
+		}
+	}
+	break;
+
+	default:
+		printf("l2cap_command_code: UNKNOWN (0x%02x)\n", l2cap_command_code);
+
+		// this does not parse as l2cap packet!
+		//bool is_sent = false;
+		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
+
+		break;
+
+	}
+}
+
 static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 {
 	// always handling an event as we're called when data is ready
@@ -1855,12 +2819,6 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 		write_packet(file, e_hci_packet_type::hci_synchronous_data, transfer->buffer, transfer->actual_length);
 	}
 
-	/*if (transfer_completed == 46)
-	{
-		printf("closing log file!\n");
-		file.flush();
-		file.close();
-	}*/
 	// Incoming "Information request"
 	// 0B 20 0A 00 06 00 01 00 0A 02 02 00 02 00
 
@@ -1869,7 +2827,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 
 	uint8_t acl_header_lower = 0;
 	uint8_t acl_header_upper = 0;
-	uint8_t acl_header = 0;
+	uint16_t acl_header = 0;
 
 	/*uint8_t l2cap_source_cid_lower = 0;
 	uint8_t l2cap_source_cid_upper = 0;
@@ -1877,25 +2835,25 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 
 	uint8_t l2cap_signaling_channel_lower = 0;
 	uint8_t l2cap_signaling_channel_upper = 0;
-	uint8_t l2cap_signaling_channel = 0;
+	uint16_t l2cap_signaling_channel = 0;
 
 	uint8_t l2cap_length_lower = 0;
 	uint8_t l2cap_length_upper = 0;
-	uint8_t l2cap_length = 0;
+	uint16_t l2cap_length = 0;
 
 	uint8_t data_total_length_lower = 0;
 	uint8_t data_total_length_upper = 0;
-	uint8_t data_total_length = 0;
+	uint16_t data_total_length = 0;
 
-	uint8_t l2cap_command_code = 0;	
+	//uint8_t l2cap_command_code = 0;
 
-	uint8_t l2cap_command_length_lower = 0;
+	/*uint8_t l2cap_command_length_lower = 0;
 	uint8_t l2cap_command_length_upper = 0;
-	uint8_t l2cap_command_length = 0;
+	uint16_t l2cap_command_length = 0;*/
 
-	uint8_t l2cap_information_type_lower = 0;
+	/*uint8_t l2cap_information_type_lower = 0;
 	uint8_t l2cap_information_type_upper = 0;
-	uint8_t l2cap_information_type = 0;
+	uint16_t l2cap_information_type = 0;*/
 
 	uint8_t idx = 0;
 	unsigned char buffer[2048];
@@ -1946,855 +2904,53 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 	//
 	// If there is no channel mantained for a channel id, ignore the packet!
 
-	
-
-	if (l2cap_signaling_channel == 0x00cc)
+	// there is always a fixed channel for control trafic with the id 0x0001
+	if (l2cap_signaling_channel == 0x0001)
 	{
-		// I do not know why we get 0x00cc message! I never understood!
+		process_control(idx, l2cap_length, transfer);
 	}
-	else if (l2cap_signaling_channel == 0x0041)
+	else
 	{
-		// there is no real channel management yet! 
-		// The fake code 0x0041 is for the SDP channel!
-
-		// The channel knows via it's PSM assigned during connection which
-		// protocol is exchanged over it!
-
-		// channel 0x0041 is a simulated SDP channel, so perform SDP channel parsing!
-
-		// connection handle: 2 byte
-		// total length: 2 byte
-		// l2cap length: 2 byte
-		// channel ID: 2 byte
-		//uint8_t sdp_start_index = 2 + 2 + 2 + 2;
-		uint8_t sdp_start_index = idx;
-		uint8_t sdp_length = l2cap_length;
-
-		// DEBUG dump packet
-		for (int i = sdp_start_index; i < sdp_start_index + sdp_length; i++)
+		if (channel_map.find(l2cap_signaling_channel) == channel_map.end())
 		{
-			std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(transfer->buffer[i] & 0xFF) << " ";
+			// channel is unknown
 		}
-		std::cout << std::dec << std::endl << std::endl;
-
-		// what type of SDP command this request is 
-		uint8_t sdp_pdu = transfer->buffer[idx++];
-		switch (sdp_pdu) {
-
-		case 0x06:
+		else
 		{
-			uint16_t sdp_transaction_id = 0x0000;
-
-			sdpServiceSearchAttributeRequest(transfer->buffer, idx, sdp_transaction_id);
-
-			std::array<uint8_t, 256> target = { 0 };
-			auto bytes_created = sdpServiceSearchAttributeResponse(target);
-
-			// DEBUG output hex stream
-			for (int i = 0; i < bytes_created; i++)
+			channel_pair cpair = channel_map.at(l2cap_signaling_channel);
+			switch (cpair.psm)
 			{
-				std::cout << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(target.at(i)) << " ";
-				if ((i > 0) && ((i + 1) % 16 == 0))
-				{
-					std::cout << std::endl;
-				}
+			case protocol_service::SDP:
+				process_sdp(idx, l2cap_length, transfer);
+				break;
+
+			case protocol_service::RFCOMM:
+				throw 1;
+				break;
+
+			default:
+				printf("Unknown Protocol Service!\n");
+				break;
 			}
-			std::cout << std::endl;
-
-			//
-			// Send the response
-			//
-
-			for (int i = 0; i < 1024; i++) {
-				buffer[i] = 0x00;
-			}
-
-			idx = 0;
-
-			//
-			// HCI ACL Packet
-			//
-
-			// ACL header / connection handle
-			buffer[idx++] = 0x0b;
-			buffer[idx++] = 0x20;
-
-			// length_of_sdp_packet is computed from:
-			//
-			// PDU (1 byte)
-			// transaction id (2 byte)
-			// parameter length (2 byte)
-			// attribute list byte count (2 byte)
-			// data element data
-			// continuation state (1 byte)
-			uint16_t length_of_sdp_packet = 1 + 2 + 2 + 2 + bytes_created + 1;
-
-			// data total length (2 Byte)
-			buffer[idx++] = 2 + 2 + length_of_sdp_packet; // here this is the length of the following L2CAP packet
-			buffer[idx++] = 0x00; // TODO
-
-			//
-			// L2CAP Packet
-			//
-
-			// length of SDP packet (2 Byte)			
-			buffer[idx++] = (length_of_sdp_packet >> 0) & 0xFF;
-			buffer[idx++] = (length_of_sdp_packet >> 8) & 0xFF;
-
-			// CID of communication partner (2 byte)
-			buffer[idx++] = l2cap_source_cid_lower;
-			buffer[idx++] = l2cap_source_cid_upper;
-
-			// 
-			// SDP Packet
-			// 
-
-			// PDU aka. command code (1 Byte) - Service Search Attribute Response (0x07)
-			buffer[idx++] = 0x07;
-
-			// transaction id (2 byte)			
-			buffer[idx++] = (sdp_transaction_id >> 8) & 0xFF;
-			buffer[idx++] = (sdp_transaction_id >> 0) & 0xFF;
-
-			// parameter length (2 byte) - amount of ????????????????
-			// Core_V4.0 specification
-			// BLUETOOTH SPECIFICATION Version 4.0 [Vol 3] page 224 of 656
-			// Service Discovery Protocol(SDP) Specification
-			buffer[idx++] = ((bytes_created+3) >> 8) & 0xFF;
-			buffer[idx++] = ((bytes_created+3) >> 0) & 0xFF;
-
-			// attribute list byte count (2 byte) - amount of data bytes in the binary data
-			buffer[idx++] = (bytes_created >> 8) & 0xFF;
-			buffer[idx++] = (bytes_created >> 0) & 0xFF;
-
-			// data
-			for (int i = 0; i < bytes_created; i++)
-			{
-				buffer[idx++] = target.at(i);
-			}
-
-			// continuation state
-			buffer[idx++] = 0x00;
-
-			Sleep(wait);
-			usb_send_acl_packet(buffer, idx);
-
-			// dump the outgoing packet into the .pcap file
-			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
-			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-			//submit(transfer);
 		}
-		break;
-
-		default:
-			printf("Unknown Service Discovery Protocol (SDP) Protocol Data Unit (PDU): 0x%02x\n", sdp_pdu);
-			break;
-		}		
 	}
-	else if (l2cap_signaling_channel == 0x0001)
-	{
-		//
-		// L2CAP command data
-		//
 
-		l2cap_command_code = transfer->buffer[idx++];
-		printf("l2cap_command_code: 0x%02x\n", l2cap_command_code);
-
-		l2cap_command_identifier = transfer->buffer[idx++];
-		printf("l2cap_command_identifier: 0x%02x\n", l2cap_command_identifier);
-
-		l2cap_command_length_lower = transfer->buffer[idx++];
-		l2cap_command_length_upper = transfer->buffer[idx++];
-		l2cap_command_length = (l2cap_command_length_upper << 8) + l2cap_command_length_lower;
-		printf("l2cap_command_length: 0x%04x\n", l2cap_command_length);
-
-		switch (l2cap_command_code) {
-
-		case 0x01:
-			printf("l2cap_command_code: command reject!\n");
-			break;
-
-		case 0x02:
-		{
-			printf("l2cap_command_code: connection request\n");
-
-			l2cap_information_type_lower = transfer->buffer[idx++];
-			l2cap_information_type_upper = transfer->buffer[idx++];
-			l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
-			printf("PSM SDP: 0x%04x\n", l2cap_information_type);
-
-			l2cap_source_cid_lower = transfer->buffer[idx++];
-			l2cap_source_cid_upper = transfer->buffer[idx++];
-			l2cap_source_cid = (l2cap_source_cid_upper << 8) + l2cap_source_cid_lower;
-			printf("l2cap_source_cid: 0x%04x\n", l2cap_source_cid);
-
-			// response
-
-			// 02 2a 20 10 00 0c 00 01 00 03 01 08 00 40 00 40 00 00 00 00 00
-
-			for (int i = 0; i < 1024; i++) {
-				buffer[i] = 0x00;
-			}
-
-			idx = 0;
-
-			// ACL header / connection handle
-			buffer[idx++] = 0x0b;
-			//buffer[idx++] = 0x00;
-			buffer[idx++] = 0x20;
-
-			// data total length (2 Byte)
-			buffer[idx++] = 0x10;
-			buffer[idx++] = 0x00;
-
-			// length of l2cap packet (2 Byte)
-			buffer[idx++] = 0x0c;
-			buffer[idx++] = 0x00;
-
-			// signaling channel (2 Byte) 0x0001
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x00;
-
-			// command code (1 Byte) - connection response (0x03)
-			buffer[idx++] = 0x03;
-
-			// command identifier (1 Byte)
-			//buffer[idx++] = 0x04;
-			//buffer[idx++] = 0x01;
-			buffer[idx++] = l2cap_command_identifier;
-
-			// command length (2 byte)
-			buffer[idx++] = 0x08;
-			buffer[idx++] = 0x00;
-
-			// destination CID
-			buffer[idx++] = 0x41;
-			buffer[idx++] = 0x00;
-			//buffer[idx++] = l2cap_source_cid_lower;
-			//buffer[idx++] = l2cap_source_cid_upper;
-			/*buffer[idx++] = l2cap_source_cid_upper;
-			buffer[idx++] = l2cap_source_cid_lower;*/
-
-			// source CID - own source Channel ID (CID)
-			//buffer[idx++] = 0x40;
-			//buffer[idx++] = 0x00;
-			buffer[idx++] = l2cap_source_cid_lower;
-			buffer[idx++] = l2cap_source_cid_upper;
-
-			// result success
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			// status (0x0000 = no further information available)
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			Sleep(wait);
-			usb_send_acl_packet(buffer, idx);
-
-			// dump the outgoing packet into the .pcap file
-			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
-			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-			// do we really need to submit the transfer?
-			submit(transfer);
-
-
-			////
-			//// Send configure request for MTU
-			////
-
-			//// configure request
-
-			//for (int i = 0; i < 1024; i++) {
-			//	buffer[i] = 0x00;
-			//}
-
-			//idx = 0;
-
-			//// connection handle
-			//buffer[idx++] = 0x0b;
-			//buffer[idx++] = 0x00;
-
-			//// data total length (2 Byte)
-			//buffer[idx++] = 0x10;
-			//buffer[idx++] = 0x00;
-
-			//// length of lcap packet (2 Byte)
-			//buffer[idx++] = 0x0c;
-			//buffer[idx++] = 0x00;
-
-			//// signaling channel (2 Byte) 0x0001
-			//buffer[idx++] = 0x01;
-			//buffer[idx++] = 0x00;
-
-			//// command code (1 Byte) - configure request (0x04)
-			//buffer[idx++] = 0x04;
-
-			//// command identifier (1 Byte)
-			//buffer[idx++] = static_cast<uint8_t>(l2cap_command_identifier + 1);
-
-			//// command length (2 byte)
-			//buffer[idx++] = 0x08;
-			//buffer[idx++] = 0x00;
-
-			//// destination CID 
-			////buffer[idx++] = 0x40;
-			////buffer[idx++] = 0x00;
-			//buffer[idx++] = l2cap_source_cid_lower;
-			//buffer[idx++] = l2cap_source_cid_upper;
-			////buffer[idx++] = l2cap_source_cid_upper;
-			////buffer[idx++] = l2cap_source_cid_lower;
-
-			//// source CID
-			//// buffer[idx++] = 0x40;
-			//// buffer[idx++] = 0x00;
-			////buffer[idx++] = l2cap_source_cid_lower;
-			////buffer[idx++] = l2cap_source_cid_upper;
-
-			//// reserved + continuation flag
-			//buffer[idx++] = 0x00;
-			//buffer[idx++] = 0x00;
-
-			//// Option
-			//buffer[idx++] = 0x01; // option MTU (0x01)
-			//buffer[idx++] = 0x02; // length
-
-			//// OPTION MTU value (1691)
-			////buffer[idx++] = 0x9b;
-			////buffer[idx++] = 0x06;
-
-			//buffer[idx++] = 0x00;
-			//buffer[idx++] = 0x04;
-
-			//Sleep(wait);
-			//usb_send_acl_packet(buffer, idx);
-
-			//// dump the packet into the .pcap file
-			////write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_command, idx, buffer);
-			//write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-			//submit(transfer);
-
-		}
-		break;
-
-		case 0x04: // Configure request
-		{
-			printf("CONFIGURE REQUEST! 0x04 \n\n\n");
-
-			mtu_config_request_received = true;
-			mtu_config_request_command_identifier = l2cap_command_identifier;
-
-			// response to configure request MTU
-			// 0b 00 12 00 0e 00 01 00 05 05 0a 00 4d 00 00 00 00 00 01 02 00 04
-
-			// ACL header
-			// 0b 00 - connection handle
-			// 12 00 - data total length
-
-			// L2CAP protocol
-			// 0e 00 - length
-			// 01 00 - signaling channel
-
-			// command
-			// 05 - command code (configure response == 0x05)
-			// 05 - command identifier
-			// 0a 00 - command length
-
-			// 4d 00 - destination channel
-			// 00 00 - reserved + continuation			
-			// 00 00 - success
-
-			// 01 02 00 04 - option
-
-			//unsigned char buffer[1024];
-			for (int i = 0; i < 1024; i++) {
-				buffer[i] = 0x00;
-			}
-
-			//int idx = 0;
-			idx = 0;
-
-			// Send configure response
-
-			//// ACL header
-			//buffer[idx++] = 0x0b;
-			//buffer[idx++] = 0x00;
-
-			//// data total length (2 Byte)
-			//buffer[idx++] = 0x12;
-			//buffer[idx++] = 0x00;
-
-			//// length of lcap packet (2 Byte)
-			//buffer[idx++] = 0x0e;
-			//buffer[idx++] = 0x00;
-
-			//// signaling channel (2 Byte) 0x0001
-			//buffer[idx++] = 0x01;
-			//buffer[idx++] = 0x00;
-
-			//// command code (1 Byte) - configure response (0x05)
-			//buffer[idx++] = 0x05;
-
-			//// command identifier (1 Byte)
-			//buffer[idx++] = l2cap_command_identifier;
-
-			//// command length (2 byte)
-			//buffer[idx++] = 0x0a;
-			//buffer[idx++] = 0x00;
-
-			//// destination CID 
-			////buffer[idx++] = 0x4d;
-			////buffer[idx++] = 0x00;
-			////buffer[idx++] = l2cap_source_cid_lower;
-			////buffer[idx++] = l2cap_source_cid_upper;
-			////buffer[idx++] = l2cap_source_cid_upper;
-			////buffer[idx++] = l2cap_source_cid_lower;
-
-			//// source CID
-			//buffer[idx++] = 0x4e;
-			//buffer[idx++] = 0x00;
-			////buffer[idx++] = l2cap_source_cid_lower;
-			////buffer[idx++] = l2cap_source_cid_upper;
-
-			//// reserved + continuation flag
-			//buffer[idx++] = 0x00;
-			//buffer[idx++] = 0x00;
-
-			//// result success
-			//buffer[idx++] = 0x00;
-			//buffer[idx++] = 0x00;
-
-			//// Option
-			//buffer[idx++] = 0x01; // option MTU (0x01)
-			//buffer[idx++] = 0x02; // length
-
-			//// OPTION MTU value (0x0004 == 0x0400 == 1024d)
-			////buffer[idx++] = 0x00;
-			////buffer[idx++] = 0x04;
-
-			//buffer[idx++] = transfer->buffer[18];
-			//buffer[idx++] = transfer->buffer[19];
-
-			// Send configure response
-
-			// connection handle
-			buffer[idx++] = 0x0b;
-			buffer[idx++] = 0x00;
-			//buffer[idx++] = 0x20;
-
-			// data total length (2 Byte)
-			buffer[idx++] = 0x12;
-			buffer[idx++] = 0x00;
-
-			// length of lcap packet (2 Byte)
-			buffer[idx++] = 0x0e;
-			buffer[idx++] = 0x00;
-
-			// signaling channel (2 Byte) 0x0001
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x00;
-
-			// command code (1 Byte) - configure response (0x05)
-			buffer[idx++] = 0x05;
-
-			// command identifier (1 Byte)
-			buffer[idx++] = l2cap_command_identifier;
-
-			// command length (2 byte)
-			buffer[idx++] = 0x0a;
-			buffer[idx++] = 0x00;
-
-			// destination CID 
-			//buffer[idx++] = 0x4d;
-			//buffer[idx++] = 0x00;
-			//buffer[idx++] = l2cap_source_cid_lower;
-			//buffer[idx++] = l2cap_source_cid_upper;
-			//buffer[idx++] = l2cap_source_cid_upper;
-			//buffer[idx++] = l2cap_source_cid_lower;
-
-			// source CID
-			buffer[idx++] = 0x40;
-			buffer[idx++] = 0x00;
-			//buffer[idx++] = l2cap_source_cid_lower;
-			//buffer[idx++] = l2cap_source_cid_upper;
-
-			// reserved + continuation flag
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			// result success
-			buffer[idx++] = 0x00;
-			buffer[idx++] = 0x00;
-
-			// Option
-			buffer[idx++] = 0x01; // option MTU (0x01)
-			buffer[idx++] = 0x02; // length
-
-			// OPTION MTU value (0x0004 == 0x0400 == 1024d)
-			/*buffer[idx++] = 0x00;
-			buffer[idx++] = 0x04;*/
-
-			// option value
-			buffer[idx++] = transfer->buffer[18];
-			buffer[idx++] = transfer->buffer[19];
-
-			//Sleep(wait);
-
-			//if (LIBUSB_SUCCESS != usb_send_acl_packet(buffer, idx)) {
-			//	throw "Cannot send ACL packet!";
-			//}
-			////usb_send_cmd_packet(buffer, idx);
-
-			//// dump the outgoing packet into the .pcap file
-			////write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_asynchronous_data, idx, buffer);
-			//write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-			//submit(transfer);
-		}
-		break;
-
-		case 0x06: // disconnect request
-		{
-			printf("l2cap_command_code: disconnect request\n");
-
-			authentication_request = false;
-
-			uint8_t l2cap_destination_cid_lower = transfer->buffer[idx++];
-			uint8_t l2cap_destination_cid_upper = transfer->buffer[idx++];
-			uint8_t l2cap_destination_cid = (l2cap_destination_cid_upper << 8) + l2cap_destination_cid_lower;
-			printf("PSM SDP (== l2cap_information_type): 0x%04x\n", l2cap_information_type);
-
-			l2cap_source_cid_lower = transfer->buffer[idx++];
-			l2cap_source_cid_upper = transfer->buffer[idx++];
-			l2cap_source_cid = (l2cap_source_cid_upper << 8) + l2cap_source_cid_lower;
-			printf("l2cap_source_cid: 0x%04x\n", l2cap_source_cid);
-
-			// disconnect response
-			// 0b 00 0c 00 08 00 01 00 07 06 04 00 41 00 4d 00
-
-			unsigned char buffer[1024];
-			for (int i = 0; i < 1024; i++) {
-				buffer[i] = 0x00;
-			}
-
-			int idx = 0;
-
-			// ACL header
-			buffer[idx++] = 0x0b;
-			buffer[idx++] = 0x00;
-
-			// data total length (2 Byte)
-			buffer[idx++] = 0x0c;
-			buffer[idx++] = 0x00;
-
-			// length of lcap packet (2 Byte)
-			buffer[idx++] = 0x08;
-			buffer[idx++] = 0x00;
-
-			// signaling channel (2 Byte) 0x0001
-			buffer[idx++] = 0x01;
-			buffer[idx++] = 0x00;
-
-			// command code (1 Byte) - disconnect response (0x07)
-			buffer[idx++] = 0x07;
-
-			// command identifier (1 Byte)
-			buffer[idx++] = l2cap_command_identifier;
-
-			// command length (2 byte)
-			buffer[idx++] = 0x04;
-			buffer[idx++] = 0x00;
-
-			// destination CID 
-			//buffer[idx++] = 0x4d;
-			//buffer[idx++] = 0x00;
-			buffer[idx++] = l2cap_destination_cid_lower;
-			buffer[idx++] = l2cap_destination_cid_upper;
-			//buffer[idx++] = l2cap_source_cid_upper;
-			//buffer[idx++] = l2cap_source_cid_lower;
-
-			// source CID
-			//buffer[idx++] = 0x40;
-			//buffer[idx++] = 0x00;
-			buffer[idx++] = l2cap_source_cid_lower;
-			buffer[idx++] = l2cap_source_cid_upper;
-
-			Sleep(wait);
-			usb_send_acl_packet(buffer, idx);
-
-			// dump the outgoing packet into the .pcap file
-			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_asynchronous_data, idx, buffer);
-			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-			// close the file
-			file.flush();
-			file.close();
-
-			submit(transfer);
-		}
-		break;
-
-		case 0x0A:
-		{
-			// L2CAP - information request
-			printf("l2cap_command_code: information request ...\n");
-
-			// response
-			// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
-			// 0b 00 10 00 0c 00 01 00 0b 02 08 00 02 00 00 00 80 02 00 00
-
-			// information type
-			l2cap_information_type_lower = transfer->buffer[idx++];
-			l2cap_information_type_upper = transfer->buffer[idx++];
-			l2cap_information_type = (l2cap_information_type_upper << 8) + l2cap_information_type_lower;
-			printf("l2cap_information_type: 0x%04x\n", l2cap_information_type);
-
-			if (l2cap_information_type == 0x02)
-			{
-				printf("l2cap_command_code: Send a response to the \"configure request - extended features mask\"\n");
-
-				for (int i = 0; i < 1024; i++) {
-					buffer[i] = 0x00;
-				}
-
-				idx = 0;
-
-				// connection handle
-				buffer[idx++] = 0x0b;
-				buffer[idx++] = 0x00;
-
-				// data total length
-				buffer[idx++] = 0x10;
-				buffer[idx++] = 0x00;
-
-				// L2CAP protocol length
-				buffer[idx++] = 0x0c;
-				buffer[idx++] = 0x00;
-
-				// L2CAP signaling channel
-				buffer[idx++] = 0x01;
-				buffer[idx++] = 0x00;
-
-				// command code (0x0b = information respone)
-				buffer[idx++] = 0x0b;
-
-				// command identifier (correlation id between request and response)
-				buffer[idx++] = l2cap_command_identifier;
-
-				// command length
-				buffer[idx++] = 0x08;
-				buffer[idx++] = 0x00;
-
-				// information type: (0x0002 = extended feature mask)
-				buffer[idx++] = 0x02;
-				buffer[idx++] = 0x00;
-
-				// result: (0x0000 = success)
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-
-				// features enhRetransmission ??????????????? What!?!
-				//buffer[idx++] = 0xa8;
-				buffer[idx++] = 0x80;
-				buffer[idx++] = 0x02;
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-
-				Sleep(wait);
-				usb_send_acl_packet(buffer, idx);
-
-				// write the outgoing packet into the log file
-				//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
-				write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-				submit(transfer);
-			}
-			else if (l2cap_information_type == 0x03)
-			{
-				// 0b 00 14 00 10 00 01 00 0b 03 0c 00 03 00 00 00 06 00 00 00 00 00 00 00
-
-				for (int i = 0; i < 1024; i++) {
-					buffer[i] = 0x00;
-				}
-
-				idx = 0;
-
-				// header
-				buffer[idx++] = 0x0b;
-				buffer[idx++] = 0x00;
-
-				// data total length
-				buffer[idx++] = 0x14;
-				buffer[idx++] = 0x00;
-
-				// L2CAP protocol length
-				buffer[idx++] = 0x10;
-				buffer[idx++] = 0x00;
-
-				// L2CAP signaling channel
-				buffer[idx++] = 0x01;
-				buffer[idx++] = 0x00;
-
-				// command code (0x0b = information respone)
-				buffer[idx++] = 0x0b;
-
-				// command identifier (correlation id between request and response)
-				buffer[idx++] = l2cap_command_identifier;
-
-				// command length
-				buffer[idx++] = 0x0c;
-				buffer[idx++] = 0x00;
-
-				// information type: (0x0003 = fixed channel support)
-				buffer[idx++] = 0x03;
-				buffer[idx++] = 0x00;
-
-				// result: (0x0000 = success)
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-
-				// feartures enhRetransmission ??????????????? What!?!
-				buffer[idx++] = 0x06;
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-				buffer[idx++] = 0x00;
-
-				Sleep(wait);
-				usb_send_acl_packet(buffer, idx);
-
-				//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
-				write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
-
-				submit(transfer);
-			}
-			//else if (l2cap_information_type == 0x04) 
-			//{
-			//	printf("l2cap_command_code: configure request\n");
-
-			//	// this does not parse as l2cap packet!
-			//	//bool is_sent = false;
-			//	//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
-			//}
-
-			/*
-					  for (int i = 0; i < 1024; i++) {
-						buffer[i] = 0x00;
-					  }
-
-					  idx = 0;
-					  buffer[idx++] = 0x0b;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x14;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x10;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x01;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x0b;
-					  buffer[idx++] = 0x03;
-					  buffer[idx++] = 0x0c;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x03;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x06;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-					  buffer[idx++] = 0x00;
-
-					  usleep(wait * 1000);
-					  usb_send_cmd_packet(buffer, idx);
-
-					  //bool is_sent = false
-					  write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t.hci_event, idx, buffer);
-
-					  submit(transfer);
-			*/
-		}
-		break;
-
-		case 0x0B:
-		{
-			// L2CAP - information response
-			printf("l2cap_command_code: information response ...\n");
-		}
-		break;
-
-		case 0xCC:
-		{
-			if (!authentication_request)
-			{
-				authentication_request = true;
-				printf("Starting simple pairing using HCI_Authentication_Requested !\n");
-
-				printf("\n\n\n");
-
-				//
-				// HCI command - Send "HCI_Write_Inquiry_Mode" command
-				//
-
-				printf(">>> HCI command - Send \"HCI_Write_Inquiry_Mode\" command\n");
-
-				unsigned char buffer[1024];
-				for (int i = 0; i < 1024; ++i) {
-					buffer[i] = 0x00;
-				}
-
-				// 7.1.15  Authentication Requested Command
-
-				int idx = 0;
-
-				// opcode 
-				buffer[idx++] = 0x11;
-				//buffer[idx++] = 0x0b;
-				buffer[idx++] = 0x00;
-
-				//buffer[idx++] = 0x0b;
-				//buffer[idx++] = 0x11;
-
-				buffer[idx++] = 0x00;
-
-				Sleep(wait);
-				usb_send_cmd_packet(buffer, idx);
-
-				//bool is_sent = true;
-				//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
-				write_packet(file, e_hci_packet_type::hci_command, buffer, idx);
-
-				submit(transfer);
-
-				//libusb_handle_events(context);
-
-				//file.close();
-				//file.flush();
-			}
-		}
-		break;
-
-		default:
-			printf("l2cap_command_code: UNKNOWN (0x%02x)\n", l2cap_command_code);
-
-			// this does not parse as l2cap packet!
-			//bool is_sent = false;
-			//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
-
-			break;
-
-		}
-
-	}
+	//if (l2cap_signaling_channel == 0x00cc)
+	//{
+	//	// I do not know why we get 0x00cc message! I never understood!
+	//}
+	//else if (l2cap_signaling_channel == 0x0041)
+	//{
+	//	process_sdp(idx, l2cap_length, transfer);
+	//}
+	//else if (l2cap_signaling_channel == 0x0001)
+	//{
+	//	process_control(idx, l2cap_length, transfer);
+	//}
+	//else 
+	//{
+	//	printf("Unknown channel!\n");
+	//}
 	
 	/*if (transfer_completed == 51) {
 		printf("Closing file\n");
@@ -5021,6 +5177,8 @@ int main()
 {
     std::cout << "Hello HCI test!" << std::endl;
 
+	link_key_database.load_from_file("link_key_database.lkd");
+
 	/*
 
 	//std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_asus_bt400.pcap";
@@ -5285,5 +5443,4 @@ int main()
 	file.close();
 
 	return 0;
-
 }

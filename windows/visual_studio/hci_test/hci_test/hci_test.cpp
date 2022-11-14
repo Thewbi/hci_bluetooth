@@ -33,10 +33,10 @@ bool mtu_config_request_sent = false;
 
 // from btstack/platform/libusb/hci_transport_h2_libusb.c
 
-#define EVENT_IN_BUFFER_COUNT 100
+#define EVENT_IN_BUFFER_COUNT 150
 static struct libusb_transfer *event_in_transfer[EVENT_IN_BUFFER_COUNT];
 
-#define ACL_IN_BUFFER_COUNT 100
+#define ACL_IN_BUFFER_COUNT 150
 static struct libusb_transfer *acl_in_transfer[ACL_IN_BUFFER_COUNT];
 
 // incoming buffer for HCI Events
@@ -58,7 +58,8 @@ libusb_device_handle* handle = NULL;
 
 libusb_context* context = NULL;
 
-uint32_t wait = 100;
+//uint32_t wait = 100;
+uint32_t wait = 5;
 
 
 
@@ -137,6 +138,9 @@ int interface_number = 0;
 
 std::fstream file;
 char buffer[2048];
+
+static uint8_t ng_btsocket_rfcomm_fcs2(uint8_t *data);
+static uint8_t ng_btsocket_rfcomm_fcs3(uint8_t *data);
 
 void write_pcaprec_hdr_t(std::fstream& file, uint32_t time, bool is_sent, hci_packet_type_t packet_type, uint32_t len, unsigned char* data)
 {
@@ -648,6 +652,7 @@ void dump_hci_event(struct libusb_transfer* transfer)
 
 			Sleep(wait);
 			usb_send_cmd_packet(buffer, idx);
+			Sleep(wait*2);
 
 			//bool is_sent = true;
 			//write_pcaprec_hdr_t(file, 1000, is_sent, hci_packet_type_t::hci_command, idx, buffer);
@@ -2786,8 +2791,655 @@ void process_control(uint8_t& idx, uint16_t& l2cap_length, struct libusb_transfe
 		//write_pcaprec_hdr_t(file, 1000, false, hci_packet_type_t::hci_event, transfer->actual_length, transfer->buffer);
 
 		break;
-
 	}
+}
+
+// wireshark view filter for RFCOMM: btrfcomm
+void process_rfcomm(uint8_t& idx, uint16_t& l2cap_length, struct libusb_transfer *transfer,
+	channel_pair& cpair)
+{
+	uint8_t rfcomm_start_index = idx;
+	uint16_t rfcomm_length = l2cap_length;
+
+	// DEBUG dump packet
+	for (int i = rfcomm_start_index; i < rfcomm_start_index + rfcomm_length; i++)
+	{
+		std::cout << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(transfer->buffer[i] & 0xFF) << " ";
+	}
+	std::cout << std::dec << std::endl << std::endl;
+
+	// DLCI (bit 7-2)
+	// C/R Flag (bit 1)
+	// EA Flag (bit 0)
+	uint8_t address = transfer->buffer[idx++];
+
+	// what type of RFCOMM command this request is 
+	uint8_t control_frame_type = transfer->buffer[idx++];	
+
+	uint8_t payload_length = transfer->buffer[idx++];
+
+	//uint8_t frame_check_sequence = transfer->buffer[idx++];
+
+	switch (control_frame_type)
+	{
+		case 0xFF:
+		{
+			printf("control_frame_type == 0xFF: Rcvd UIH channel=1 UID\n");
+
+			uint8_t credits = transfer->buffer[idx++];
+			printf("Credits: %d: \n", credits);
+
+			printf("Payload Length: %d\n", payload_length);
+
+			printf("Payload: \n");
+			for (int i = 0; i < (payload_length - 6); i++)
+			{
+				printf("%c", transfer->buffer[idx++]);
+			}
+			printf("\n");
+		}
+		break;
+
+		// 	97	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		RFCOMM	13	Rcvd DISC Channel=0 
+		case 0x53:
+		{
+			// Disconnect
+
+			// response:
+			// 02 0b00 0800 0400 4e00 0b730192
+
+			// Packet Logger
+			// 02
+			
+			// HCI ACL Packet
+			// 0b00 - connection handle
+			// 0800 - data total length
+
+			// L2CAP Protocol
+			// 0400 - length
+			// 4e00 - channel ID (CID)
+			
+			// RFCOMM Protocol
+			// 0b - Address
+			// 73 - control frame type
+			// 01 - Payload length (0x15 == 21d) ???
+			// 92 - Frame Check Sequence
+
+			//
+			// Send the response
+			//
+
+			uint8_t buffer[1024];
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			uint8_t idx = 0;
+
+			//
+			// HCI ACL Packet
+			//
+
+			// ACL header / connection handle
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x20;
+
+			// data total length (2 Byte)
+			buffer[idx++] = 0x08;
+			buffer[idx++] = 0x00;
+
+			//
+			// L2CAP Packet
+			//
+
+			// length of SDP packet (2 Byte)			
+			buffer[idx++] = 0x04;
+			buffer[idx++] = 0x00;
+
+			// CID of communication partner (2 byte)
+			buffer[idx++] = (cpair.source_cid >> 0) & 0xFF;
+			buffer[idx++] = (cpair.source_cid >> 8) & 0xFF;
+
+			// 
+			// RFCOMM Packet
+			// 
+
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x73;
+			buffer[idx++] = 0x01;			
+
+			// frame check sequence
+			buffer[idx++] = 0x92;
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			// dump the outgoing packet into the .pcap file
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+			submit(transfer);
+		}
+		break;
+
+		// 	96	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		RFCOMM	23	Rcvd UIH Channel=0 -> 1 MPX_CTRL DLC Parameter Negotiation (PN) 
+		case 0xef: // control frame type: Received UIH Channel 0 (Parameter Negotiation (PN))
+		{
+			if (address == 0x03)
+			{
+				uint8_t multiplexer_command_type = transfer->buffer[idx++];
+
+				if (multiplexer_command_type == 0x83)
+				{
+
+					// Parameter Negotiation (PN)
+
+					// response:
+					// 02 0b00 1200 0e00 4e00 01 ef 15 811102e00000de030000 aa
+
+					// PacketLogger
+					// 02 
+					//
+					// HCI ACL Packet
+					// 0b00 - connection handle
+					// 1200 - data total length
+					//
+					// L2CAP Protocol
+					// 0e00 - length
+					// 4e00 - channel ID (CID)
+					//
+					// RFCOMM Protocol
+					// 01 - Address
+					// ef - control frame type
+					// 15 - Payload length (0x15 == 21d) ???
+					// 81 11 02 e0 00 00 de 03 00 00 - Multiplexer Control Command
+					// aa - Frame Check Sequence
+
+					//
+					// Send the response
+					//
+
+					uint8_t buffer[1024];
+					for (int i = 0; i < 1024; i++) {
+						buffer[i] = 0x00;
+					}
+
+					uint8_t idx = 0;
+
+					//
+					// HCI ACL Packet
+					//
+
+					// ACL header / connection handle
+					buffer[idx++] = 0x0b;
+					buffer[idx++] = 0x20;
+
+					// data total length (2 Byte)
+					buffer[idx++] = 0x12;
+					buffer[idx++] = 0x00;
+
+					//
+					// L2CAP Packet
+					//
+
+					// length of SDP packet (2 Byte)			
+					buffer[idx++] = 0x0e;
+					buffer[idx++] = 0x00;
+
+					// CID of communication partner (2 byte)
+					buffer[idx++] = (cpair.source_cid >> 0) & 0xFF;
+					buffer[idx++] = (cpair.source_cid >> 8) & 0xFF;
+
+					// 
+					// RFCOMM Packet
+					// 
+
+					buffer[idx++] = 0x01;
+					buffer[idx++] = 0xef;
+					buffer[idx++] = 0x15;
+
+					// 81 11 02 e0 00 00 de 03 00 00 - Multiplexer Control Command
+					buffer[idx++] = 0x81;
+					buffer[idx++] = 0x11;
+					buffer[idx++] = 0x02;
+					buffer[idx++] = 0xe0;
+					buffer[idx++] = 0x00;
+					buffer[idx++] = 0x00;
+					buffer[idx++] = 0xde;
+					buffer[idx++] = 0x03;
+					buffer[idx++] = 0x00;
+					buffer[idx++] = 0x00;
+
+					// frame check sequence
+					buffer[idx++] = 0xaa;
+
+					Sleep(wait);
+					usb_send_acl_packet(buffer, idx);
+
+					// dump the outgoing packet into the .pcap file
+					//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+					write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+					submit(transfer);
+				}
+				else if (multiplexer_command_type == 0xe3)
+				{
+					printf("Modem Status Command - Received Command from Communication Partner!");
+
+					//
+					// Send the response
+					//
+
+					// 02 0b00 0c00 0800 4e00 01ef 09e1050b8d aa
+
+					uint8_t buffer[1024];
+					for (int i = 0; i < 1024; i++) {
+						buffer[i] = 0x00;
+					}
+
+					uint8_t idx = 0;
+
+					//
+					// HCI ACL Packet
+					//
+
+					// ACL header / connection handle
+					buffer[idx++] = 0x0b;
+					buffer[idx++] = 0x20;
+
+					// data total length (2 Byte)
+					buffer[idx++] = 0x0c;
+					buffer[idx++] = 0x00;
+
+					//
+					// L2CAP Packet
+					//
+
+					// length of SDP packet (2 Byte)			
+					buffer[idx++] = 0x08;
+					buffer[idx++] = 0x00;
+
+					// CID of communication partner (2 byte)
+					buffer[idx++] = (cpair.source_cid >> 0) & 0xFF;
+					buffer[idx++] = (cpair.source_cid >> 8) & 0xFF;
+
+					// 
+					// RFCOMM Packet
+					// 
+
+					buffer[idx++] = 0x01;
+					buffer[idx++] = 0xef;
+
+					//  09 e1 05 0b 8d 
+					buffer[idx++] = 0x09;
+					buffer[idx++] = 0xe1;
+					buffer[idx++] = 0x05;
+					buffer[idx++] = 0x0b;
+					buffer[idx++] = 0x8d;
+
+					// frame check sequence
+					buffer[idx++] = 0xaa;
+
+					Sleep(wait);
+					usb_send_acl_packet(buffer, idx);
+
+					// dump the outgoing packet into the .pcap file
+					//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+					write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+					submit(transfer);
+				}
+				else if (multiplexer_command_type == 0xe1) // 225d
+				{
+					printf("Modem Status Command - Received Command from Communication Partner!");
+
+					// 03 0b20 0c00 0800 430003ef09e1050b8d70
+				}
+				else
+				{
+					throw 1;
+				}
+			}
+			else
+			{
+				//uint8_t credits = frame_check_sequence;
+				//printf("Credits: %d: \n", credits);
+
+				printf("Payload Length: %d\n", payload_length);
+
+				printf("Payload: \n");
+				for (int i = 0; i < (payload_length - 6); i++)
+				{
+					printf("%c", transfer->buffer[idx++]);
+				}
+				printf("\n");
+			}
+		}
+		break;
+
+		// Set Asynchronous Balanced Mode (SABM)
+		case 0x3f: // Received SABM Channel=1
+		{
+			// 020b00080004004e00037301d7
+
+			//
+			// Send the response (Unnumbered Acknowledgement)
+			//
+			// Sent UA Channel=1
+			//
+
+			uint8_t buffer[1024];
+			for (int i = 0; i < 1024; i++) {
+				buffer[i] = 0x00;
+			}
+
+			uint8_t idx = 0;
+
+			//
+			// HCI ACL Packet
+			//
+
+			// ACL header / connection handle
+			buffer[idx++] = 0x0b;
+			buffer[idx++] = 0x20;
+
+			// data total length (2 Byte)
+			buffer[idx++] = 0x08;
+			buffer[idx++] = 0x00;
+
+			//
+			// L2CAP Packet
+			//
+
+			// length of SDP packet (2 Byte)			
+			buffer[idx++] = 0x04;
+			buffer[idx++] = 0x00;
+
+			// CID of communication partner (2 byte)
+			buffer[idx++] = (cpair.source_cid >> 0) & 0xFF;
+			buffer[idx++] = (cpair.source_cid >> 8) & 0xFF;
+
+			// 
+			// RFCOMM Packet
+			// 
+
+			uint8_t ddd[3];
+			ddd[0] = address;
+			ddd[1] = 0x73;
+			ddd[2] = 0x01;
+
+			
+
+			// address 
+			buffer[idx++] = address;
+
+			// control frame type
+			buffer[idx++] = 0x73;
+
+			// payload length
+			buffer[idx++] = 0x01;
+
+			// Frame check sequence
+			//buffer[idx++] = 0xd7;
+			buffer[idx++] = ng_btsocket_rfcomm_fcs3(ddd);
+
+
+
+			Sleep(wait);
+			usb_send_acl_packet(buffer, idx);
+
+			// dump the outgoing packet into the .pcap file
+			//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+			write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+			if (address == 0x0b)
+			{
+				uint8_t buffer[1024];
+				for (int i = 0; i < 1024; i++) {
+					buffer[i] = 0x00;
+				}
+
+				uint8_t idx = 0;
+
+				//
+				// Send modem status command
+				//
+				// 	536	19765.000000	Cc&CTech_7d:0e:96 (SPP Counter 5C:F3:70:7D:0E:96)		70:5f:a3:0f:8a:ab ()		RFCOMM	17	Sent UIH Channel=0 -> 1 MPX_CTRL Modem Status Command (MSC) 
+				//
+
+				// 02 0b00 0c00 0800 4e00 01ef09e3050b8daa
+
+
+				// 	544	19797.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (SPP Counter 5C:F3:70:7D:0E:96)		RFCOMM	17	Rcvd UIH Channel=0 -> 1 MPX_CTRL Modem Status Command (MSC) 
+				// 03 0b20 0c00 0800 4300 03ef09e3050b8d70
+
+				//
+				// HCI ACL Packet
+				//
+
+				// ACL header / connection handle
+				buffer[idx++] = 0x0b;
+				buffer[idx++] = 0x20;
+
+				// data total length (2 Byte)
+				buffer[idx++] = 0x0c;
+				buffer[idx++] = 0x00;
+
+				//
+				// L2CAP Packet
+				//
+
+				// length of SDP packet (2 Byte)			
+				buffer[idx++] = 0x08;
+				buffer[idx++] = 0x00;
+
+				// CID of communication partner (2 byte)
+				buffer[idx++] = (cpair.source_cid >> 0) & 0xFF;
+				buffer[idx++] = (cpair.source_cid >> 8) & 0xFF;
+
+				// 
+				// RFCOMM Packet
+				// 
+
+				// 01 ef 09 e3 05 0b 8d aa
+
+				// address 
+				//buffer[idx++] = 0x01; // response
+				buffer[idx++] = 0x03; // request
+
+				// control frame type
+				buffer[idx++] = 0xef;
+
+				// payload length
+				buffer[idx++] = 0x09;
+
+				// multiplexer command
+				buffer[idx++] = 0xe3;
+				buffer[idx++] = 0x05;
+				buffer[idx++] = 0x0b;
+				buffer[idx++] = 0x8d;
+
+				// Frame check sequence
+				//buffer[idx++] = 0xaa; // response
+				buffer[idx++] = 0x70; // request
+
+				Sleep(wait);
+				usb_send_acl_packet(buffer, idx);
+
+				// dump the outgoing packet into the .pcap file
+				//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+				write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+				submit(transfer);
+
+				/**/
+				// 	540	19766.000000	Cc&CTech_7d:0e:96 (SPP Counter 5C:F3:70:7D:0E:96)		70:5f:a3:0f:8a:ab ()		RFCOMM	14	Sent UIH Channel=1 UID 
+
+				// 02 0b00 0900 0500 4e00 09ff010a5c
+
+				//
+				// Send UIH Channel=1 UID
+				// I do not know what this message is for, but it is sent
+				//
+				//
+
+				for (int i = 0; i < 1024; i++) {
+					buffer[i] = 0x00;
+				}
+
+				idx = 0;
+
+				//
+				// HCI ACL Packet
+				//
+
+				// ACL header / connection handle
+				buffer[idx++] = 0x0b;
+				buffer[idx++] = 0x20;
+
+				// data total length (2 Byte)
+				buffer[idx++] = 0x09;
+				buffer[idx++] = 0x00;
+
+				//
+				// L2CAP Packet
+				//
+
+				// length of SDP packet (2 Byte)			
+				buffer[idx++] = 0x05;
+				buffer[idx++] = 0x00;
+
+				// CID of communication partner (2 byte)
+				buffer[idx++] = (cpair.source_cid >> 0) & 0xFF;
+				buffer[idx++] = (cpair.source_cid >> 8) & 0xFF;
+
+				// 
+				// RFCOMM Packet
+				// 
+
+				// 09 ff 01 0a 5c
+
+				// address 
+				buffer[idx++] = 0x09;
+
+				// control frame type
+				buffer[idx++] = 0xff;
+
+				// payload length
+				buffer[idx++] = 0x01;
+
+				// credits
+				buffer[idx++] = 0x0a;
+
+				// Frame check sequence
+				buffer[idx++] = 0x5c;
+
+				Sleep(wait);
+				usb_send_acl_packet(buffer, idx);
+
+				// dump the outgoing packet into the .pcap file
+				//write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+				write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+				
+				submit(transfer);
+
+
+
+				//// 02 0b00 1e00 1a00 4e00 09 ef2a004254737461636b20636f756e74657220303030310a40
+				////
+				//// Send UIH Channel=1 UID
+				////
+
+				////uint8_t buffer[1024];
+				//for (int i = 0; i < 1024; i++) {
+				//	buffer[i] = 0x00;
+				//}
+
+				//idx = 0;
+
+				////
+				//// HCI ACL Packet
+				////
+
+				//// ACL header / connection handle
+				//buffer[idx++] = 0x0b;
+				//buffer[idx++] = 0x20;
+
+				//// data total length (2 Byte)
+				//buffer[idx++] = 0x09;
+				//buffer[idx++] = 0x00;
+
+				////
+				//// L2CAP Packet
+				////
+
+				//// length of SDP packet (2 Byte)			
+				//buffer[idx++] = 0x1a;
+				//buffer[idx++] = 0x00;
+
+				//// CID of communication partner (2 byte)
+				//buffer[idx++] = (cpair.source_cid >> 0) & 0xFF;
+				//buffer[idx++] = (cpair.source_cid >> 8) & 0xFF;
+
+				//// 
+				//// RFCOMM Packet
+				//// 
+
+				//// 09 ef 2a00 4254737461636b20636f756e74657220303030310a 40
+
+				//// address 
+				//buffer[idx++] = 0x09;
+
+				//// control frame type
+				//buffer[idx++] = 0xef;
+
+				//// payload length
+				//buffer[idx++] = 0x2a;
+				//buffer[idx++] = 0x00;
+
+				//// payload
+				//buffer[idx++] = 0x42;
+				//buffer[idx++] = 0x54;
+				//buffer[idx++] = 0x73;
+				//buffer[idx++] = 0x74;
+				//buffer[idx++] = 0x61;
+				//buffer[idx++] = 0x63;
+				//buffer[idx++] = 0x6b;
+				//buffer[idx++] = 0x20;
+				//buffer[idx++] = 0x63;
+				//buffer[idx++] = 0x6f;
+				//buffer[idx++] = 0x75;
+				//buffer[idx++] = 0x6e;
+				//buffer[idx++] = 0x74;
+				//buffer[idx++] = 0x65;
+				//buffer[idx++] = 0x72;
+				//buffer[idx++] = 0x20;
+				//buffer[idx++] = 0x30;
+				//buffer[idx++] = 0x30;
+				//buffer[idx++] = 0x30;
+				//buffer[idx++] = 0x31;
+				//buffer[idx++] = 0x0a;
+
+				//// Frame check sequence
+				//buffer[idx++] = 0x40;
+
+				//Sleep(wait);
+				//usb_send_acl_packet(buffer, idx);
+
+				//// dump the outgoing packet into the .pcap file
+				////write_pcaprec_hdr_t(file, 1000, true, hci_packet_type_t::hci_synchronous_data, idx, buffer);
+				//write_packet(file, e_hci_packet_type::hci_asynchronous_data, buffer, idx);
+
+				submit(transfer);
+			}
+		}
+		break;
+
+		default:
+			throw 1;
+			break;
+	}
+	
 }
 
 static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
@@ -2935,7 +3587,7 @@ static void LIBUSB_CALL async_acl_callback(struct libusb_transfer *transfer)
 				break;
 
 			case protocol_service::RFCOMM:
-				throw 1;
+				process_rfcomm(idx, l2cap_length, transfer, cpair);				
 				break;
 
 			default:
@@ -4522,6 +5174,7 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
 	usb_command_active = 1;
 
 	// submit transfer
+	Sleep(wait);
 	int libusb_submit_transfer_result = libusb_submit_transfer(command_out_transfer);
 	if (libusb_submit_transfer_result < 0)
 	{
@@ -5182,6 +5835,155 @@ static uint8_t find_dev(libusb_device **devs)
 
 	printf("end find_dev()\n");
 }
+
+// http://web.mit.edu/freebsd/head/sys/netgraph/bluetooth/socket/ng_btsocket_rfcomm.c
+static uint8_t	ng_btsocket_rfcomm_crc_table[256] = {
+	0x00, 0x91, 0xe3, 0x72, 0x07, 0x96, 0xe4, 0x75,
+	0x0e, 0x9f, 0xed, 0x7c, 0x09, 0x98, 0xea, 0x7b,
+	0x1c, 0x8d, 0xff, 0x6e, 0x1b, 0x8a, 0xf8, 0x69,
+	0x12, 0x83, 0xf1, 0x60, 0x15, 0x84, 0xf6, 0x67,
+
+	0x38, 0xa9, 0xdb, 0x4a, 0x3f, 0xae, 0xdc, 0x4d,
+	0x36, 0xa7, 0xd5, 0x44, 0x31, 0xa0, 0xd2, 0x43,
+	0x24, 0xb5, 0xc7, 0x56, 0x23, 0xb2, 0xc0, 0x51,
+	0x2a, 0xbb, 0xc9, 0x58, 0x2d, 0xbc, 0xce, 0x5f,
+
+	0x70, 0xe1, 0x93, 0x02, 0x77, 0xe6, 0x94, 0x05,
+	0x7e, 0xef, 0x9d, 0x0c, 0x79, 0xe8, 0x9a, 0x0b,
+	0x6c, 0xfd, 0x8f, 0x1e, 0x6b, 0xfa, 0x88, 0x19,
+	0x62, 0xf3, 0x81, 0x10, 0x65, 0xf4, 0x86, 0x17,
+
+	0x48, 0xd9, 0xab, 0x3a, 0x4f, 0xde, 0xac, 0x3d,
+	0x46, 0xd7, 0xa5, 0x34, 0x41, 0xd0, 0xa2, 0x33,
+	0x54, 0xc5, 0xb7, 0x26, 0x53, 0xc2, 0xb0, 0x21,
+	0x5a, 0xcb, 0xb9, 0x28, 0x5d, 0xcc, 0xbe, 0x2f,
+
+	0xe0, 0x71, 0x03, 0x92, 0xe7, 0x76, 0x04, 0x95,
+	0xee, 0x7f, 0x0d, 0x9c, 0xe9, 0x78, 0x0a, 0x9b,
+	0xfc, 0x6d, 0x1f, 0x8e, 0xfb, 0x6a, 0x18, 0x89,
+	0xf2, 0x63, 0x11, 0x80, 0xf5, 0x64, 0x16, 0x87,
+
+	0xd8, 0x49, 0x3b, 0xaa, 0xdf, 0x4e, 0x3c, 0xad,
+	0xd6, 0x47, 0x35, 0xa4, 0xd1, 0x40, 0x32, 0xa3,
+	0xc4, 0x55, 0x27, 0xb6, 0xc3, 0x52, 0x20, 0xb1,
+	0xca, 0x5b, 0x29, 0xb8, 0xcd, 0x5c, 0x2e, 0xbf,
+
+	0x90, 0x01, 0x73, 0xe2, 0x97, 0x06, 0x74, 0xe5,
+	0x9e, 0x0f, 0x7d, 0xec, 0x99, 0x08, 0x7a, 0xeb,
+	0x8c, 0x1d, 0x6f, 0xfe, 0x8b, 0x1a, 0x68, 0xf9,
+	0x82, 0x13, 0x61, 0xf0, 0x85, 0x14, 0x66, 0xf7,
+
+	0xa8, 0x39, 0x4b, 0xda, 0xaf, 0x3e, 0x4c, 0xdd,
+	0xa6, 0x37, 0x45, 0xd4, 0xa1, 0x30, 0x42, 0xd3,
+	0xb4, 0x25, 0x57, 0xc6, 0xb3, 0x22, 0x50, 0xc1,
+	0xba, 0x2b, 0x59, 0xc8, 0xbd, 0x2c, 0x5e, 0xcf
+};
+
+// http://web.mit.edu/freebsd/head/sys/netgraph/bluetooth/socket/ng_btsocket_rfcomm.c
+static uint8_t ng_btsocket_rfcomm_crc(uint8_t *data, int length)
+{
+	uint8_t	crc = 0xff;
+
+	while (length--)
+		crc = ng_btsocket_rfcomm_crc_table[crc ^ *data++];
+
+	return (crc);
+}
+
+// http://web.mit.edu/freebsd/head/sys/netgraph/bluetooth/socket/ng_btsocket_rfcomm.c
+// use this for all frames that are not UIH
+static uint8_t ng_btsocket_rfcomm_fcs3(uint8_t *data)
+{
+	return (0xff - ng_btsocket_rfcomm_crc(data, 3));
+}
+
+// http://web.mit.edu/freebsd/head/sys/netgraph/bluetooth/socket/ng_btsocket_rfcomm.c
+// use this for all frames that are UIH
+static uint8_t ng_btsocket_rfcomm_fcs2(uint8_t *data)
+{
+	return (0xff - ng_btsocket_rfcomm_crc(data, 2));
+}
+
+//int main() 
+//{
+//	// 03 3f 01 1c - Rcvd SABM channel 0
+//	uint8_t data[4];
+//	data[0] = 0x03;
+//	data[1] = 0x3f;
+//	data[2] = 0x01;
+//	data[3] = 0x1c;
+//
+//	uint8_t frame_check_sequence = ng_btsocket_rfcomm_fcs3(data);
+//
+//	if (frame_check_sequence != data[3])
+//	{
+//		throw 1;
+//	}
+//
+//
+//	// 0b 3f 01 59 - Rcvd SABM channel 1
+//	data[0] = 0x0b;
+//	data[1] = 0x3f;
+//	data[2] = 0x01;
+//	data[3] = 0x59;
+//
+//	frame_check_sequence = ng_btsocket_rfcomm_fcs3(data);
+//
+//	if (frame_check_sequence != data[3])
+//	{
+//		throw 1;
+//	}
+//
+//
+//	// 03 ef 15 83 11 02 f0 00 00 de 03 00 07 70
+//	// 	95	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (BCM20702A)		RFCOMM	23	Rcvd UIH Channel=0 -> 1 MPX_CTRL DLC Parameter Negotiation (PN) 
+//
+//	const int len = 14;
+//	uint8_t data_uih[len];
+//	uint8_t idx = 0;
+//	/*data_uih[idx++] = 0x03;
+//	data_uih[idx++] = 0xef;
+//	data_uih[idx++] = 0x15;
+//	data_uih[idx++] = 0x83;
+//	data_uih[idx++] = 0x11; 
+//
+//	data_uih[idx++] = 0x02;
+//	data_uih[idx++] = 0xf0;
+//	data_uih[idx++] = 0x00;
+//	data_uih[idx++] = 0x00;
+//	data_uih[idx++] = 0xde;
+//
+//	data_uih[idx++] = 0x03;
+//	data_uih[idx++] = 0x00;
+//	data_uih[idx++] = 0x07;
+//	data_uih[idx++] = 0x70;*/
+//
+//	data_uih[idx++] = 0x01;
+//	data_uih[idx++] = 0xef;
+//	data_uih[idx++] = 0x15;
+//	data_uih[idx++] = 0x81;
+//	data_uih[idx++] = 0x11;
+//
+//	data_uih[idx++] = 0x02;
+//	data_uih[idx++] = 0xe0;
+//	data_uih[idx++] = 0x00;
+//	data_uih[idx++] = 0x00;
+//	data_uih[idx++] = 0xde;
+//
+//	data_uih[idx++] = 0x03;
+//	data_uih[idx++] = 0x00;
+//	data_uih[idx++] = 0x00;
+//	data_uih[idx++] = 0xaa;
+//
+//	frame_check_sequence = ng_btsocket_rfcomm_fcs2(data_uih);
+//
+//	if (frame_check_sequence != data_uih[len - 1])
+//	{
+//		throw 1;
+//	}
+//
+//	return 0;
+//}
 
 int main()
 {

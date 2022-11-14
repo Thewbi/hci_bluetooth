@@ -1,0 +1,20 @@
+030b200e000a0042000bff0b036161610d0a86
+
+-- Packet Logger Recv (0x03)
+03
+
+-- HCI ACL
+0b20 - connection handle
+0e00 - data total length
+
+-- L2CAP
+0a00 - length
+4200 - CID
+
+-- RFCOMM
+0b - address
+ff - control frame type
+0b - payload length
+03 - credits
+6161610d0a
+86 - frame check sequence

@@ -16,5 +16,5 @@
 ff - control frame type
 0b - payload length
 03 - credits
-6161610d0a
+61 61 61 0d 0a
 86 - frame check sequence

@@ -1,21 +1,28 @@
 # hci_bluetooth
 USB hci bluetooth
 
-Look at Bluekitchens Bluetooth stack. The Bluekitchen stack was used to learn how bluetooth stacks work!
+Please have a look at Bluekitchens Bluetooth stack. 
+The Bluekitchen stack was used to learn how bluetooth stacks actually work!
 
-# What does this repository contain
+# What does this repository contain?
 
 Warning: This is work in progress! This section talks about planned and already implemented features alike!
 
 This repository contains a user space bluetooth stack for bluetooth classic aka. Basic Rate/Enhanced Data Rate (BR/EDR).
 
 It leverages the HCI layer to talk to a bluetooth dongle using libusb.
-This means you can turn off your operating systems bluetooth functionality (Mac and Windows allow you to turn on or turn off bluetooth)
+This means you can turn off your operating system's bluetooth functionality (Mac and Windows allow you to turn on or turn off bluetooth)
 and let the user space stack connect to the USB bluetooth dongle.
 
-As a Dongle, this stack currently only was tested with the ASUS USB-BT400 USB bluetooth dongle.
+HCI is the host controller interface. A bluetooth dongle takes on the role of a controller, this application acts as
+the host. HCI can be implemented over USB but there are other types of supported physical media. The controller takes
+care of the radio transmission whereas the host takes care of the protocol stack up to the application layer. HCI
+commands form the interface between your hardware dongle and the user space stack.
 
-The stack will then listen for bluetooth connections and act as a RFCOMM server.
+As a Dongle, this stack currently only was tested with the ASUS USB-BT400 USB bluetooth dongle.
+The stack has primarly been tested on win10.
+
+The stack will then listen for bluetooth connections and act as a SDP and RFCOMM server.
 
 # HCI
 
@@ -39,13 +46,37 @@ to transfer data. The bluetooth stack then sends and receives the data.
 
 The user space bluetooth stack acts as the host in the Host Controller Interface HCI.
 
-It will send a set of HCI commands to initialize and prepare the USB Bluetooth dongle for receiving connections.
-It will control advertising (as a server) or inquiry and scanning for servers (as a client).
-It will set the local name of the bluetooth device 
-It will define which process is used during pairing between devices (Does the device have a UI or not? Does it require a Pin or not?)
-It will get HCI connection requests and either accept or deny them.
+* It will send a set of HCI commands to initialize and prepare the USB Bluetooth dongle for receiving connections.
+* It will control advertising (as a server) or inquiry and scanning for servers (as a client).
+* It will set the local name of the bluetooth device 
+* It will define which process is used during pairing between devices (Does the device have a UI or not? Does it require a Pin or not?)
+* It will get HCI connection requests and either accept or deny them.
 
-## L2CAP
+## HCI and Link Keys
+
+At some point during the connection, the client device will challenge the host via a Link Key.
+As far as I understand, link keys are related to pairing between a host and a device. When the pairing
+is deleted on either side, a new pairing has to be initiated and this new pairing will the have
+it's own new link key.
+
+Anyways, to be on the save side, be warned: Link keys are dumped in plain text into the wireshark log files
+and also stored into a custom fileformat, the link key database .lkd file format by this application.
+It is probably wise to not commit those files to github or share them on the internet!
+
+The lkd file format is a two byte integer which contain the amount of pairs that are stored in the file.
+Each pair then consists of the 6 byte bluetooth BT-Addr and the 16 byte link key that is currently used
+for that BT-Addr.
+
+The client challenges the host with a request for a link key. The host either has a link key for that 
+BT-Addr which the host will then respond with or it responds with a no-key answer. If no key is present,
+the device will sent a link key. The host may store this link key so it can answer future challenges or
+it may choose to ignore the link key. The bluetooth standard even allows the host to send certain HCI
+messages that allow it to store the link key in the memory of the bluetooth controller it talks to (I think).
+This is interesting for embedded devices with little or no persistend memory of their own. On a windows
+machine, this application stores the BT-Addr and Link keys into a file in plain-text! This file is
+dubbed link key database .lkd.
+
+# L2CAP
 
 Once a HCI connection is established, that HCI connection can be used by a client to send a L2CAP connection.
 L2CAP is a true utilitary transport protocol. It acts as the base transmission layer to run other higher-level protocols over.
@@ -66,6 +97,28 @@ The client can then select one of those services and connect to the service.
 
 It is also possible to skip the SDP queries and directly connect to a service. This is guesswork as the service might or might
 not be available. The SDP query is a way to discover services for a more save way of connecting to a server.
+
+### Relationship between RFCOMM and SDP
+
+Since SDP and RFCOMM are both located on top of the L2CAP protocol, the RFCOMM traffic does not pass through SDP!
+SDP and RFCOMM are independant services. SDP will simply respond with a list of services when asked. RFCOMM might
+by in that list but other than that RFCOMM is not connected to SDP in any way.
+
+An interaction with an RFCOMM server usually follows a SDP query since the client first ask via SDP if a RFCOMM
+server is available, then it connects to the RFCOMM server.
+
+The steps are:
+
+1. Connect to SDP
+1. Query SDP for RFCOMM services
+1. Disconnect from SDP
+1. Connect to the RFCOMM server
+1. Exchange data
+1. Disconnect from the RFCOMM server.
+
+If you are debugging or programming an RFCOMM server and you see that a SDP connection is established but
+closed again after a SDP query, then this does not mean that your RFCOMM server does not work. In fact
+it is a good sign since the connection to the SDP service is not needed to talk to the RFCOMM server.
 
 Examples of SDP messages are:
 
@@ -118,20 +171,6 @@ Attribute 0x0100: type STRING (4), element len 13 len 11 (0x0b)
 53 50 50 20 43 6F 75 6E 74 65 72
 ```
 
-## RFCOMM
-
-RFCOMM is one of the services that a bluetooth classic stack can provide.
-The stack first has to enter a SDP record into the SDP system so that the record can
-be returned when a client queries the existing services.
-
-If the SDP returns the existence of an RFCOMM server or the client just decides to connect to a RFCOMM server,
-then a bluetooth based equivalent of socket connection is possible to exchange data (byte arrays).
-
-RFCOMM runs on to of L2CAP.
-
-
-
-
 # Logging with WireShark
 
 The purpose of logging is to output the most low level byte array send and received and also 
@@ -158,8 +197,6 @@ Wireshark will decode the byte arrays and you can then start to hunt for errors.
 This is also a good way to learn how other bluetooth stacks work and which messages they send.
 
 Explain the formats of the .cap format and the MacOS .pklg.
-
-
 
 # libusb
 
@@ -203,19 +240,20 @@ busy and when using it again, the "Resource busy" error occurs.
 To work around this issue, a new outgoing transfer is allocated each time a message is sent.
 This allocated transfer is not returned currently. Again, I know this is terrible. I have to fix this issue.
 
-
-
-
 # Establishing L2CAP connections
 
 L2CAP connections when a client sends a L2CAP connection request over a HCI connection which has succesfully 
 been established earlier.
 
+```
 0b200c00080001000201040001004000
+```
 
 The server will answer the L2CAP connection reques with a L2CAP connection response.
 
+```
 0b2010000c000100030108004100400000000000
+```
 
 The connection is not established yet! The connection goes into phase 2 - configuration.
 In the configuration phase, the client has to send at least one configuration message to the server and
@@ -236,7 +274,6 @@ On the receiver side, L2CAP will reassemble the message and hand over the entire
 layers of the stack. To the upper layers it will look like as if a huge packet has been transferred
 over the lower layers although the lowers are only capable of dealing with fractions of messages
 one at a time.
-
 
 # Service Discovery Protocol SDP
 
@@ -305,3 +342,39 @@ a parser, then apply the parser to the packet that has arrived over that channel
 66	0.000000	70:5f:a3:0f:8a:ab ()		Cc&CTech_7d:0e:96 (WFB Counter 5C:F3:70:7D:0E:96)		SDP	29	Rcvd Service Search Attribute Request : Serial Port: Attribute Range (0x0000 - 0xffff) 
 ... SDP connection response missing here
 ```
+
+# RFCOMM
+
+Tipp: The wireshark display filter for the RFCOMM protocol is btrfcomm. Pasting btrfcomm into the filter bar and
+hitting enter will only display RFCOMM protocol messages!
+
+RFCOMM is one of the services that a bluetooth classic stack can provide.
+The stack first has to enter a SDP record into the SDP system so that the record can
+be returned when a client queries the existing services.
+
+If the SDP returns the existence of an RFCOMM server or the client just decides to connect to a RFCOMM server,
+then a bluetooth based equivalent of socket connection is possible to exchange data (byte arrays).
+
+RFCOMM runs on top of L2CAP.
+
+In a sense, RFCOMM connection establishment works very similar to the L2CAP connection establishment.
+First a channel is opened between the communication partners.
+Once the channel is exchanged, a negotiation phase takes place.
+Once the negotiation is over, Modem Status Commands (MSCs) are exchanged.
+RFCOMM is a replacement for serial communcation. As a model, null modems are used. Modems seem to 
+exchange Modem Status Commands so that the communication partner knows that it is safe to send
+messages to the modem. The RFCOMM server has to send the first Modem Status Commands according to
+my experiments. Once the client receives a MSC, it will acknowledge that command and also send one
+MSC to the host which has to acknowledge this MSC in turn. Once both communication partners have
+send and received MSC request and MSC acknowledge, the RFCOMM connection proceeds into the next phase.
+The next phase is Data exchange using a credit based system. Once in the credit based connection phase, the
+communication partner considers the connection established, at least this is my experience with tests
+using the Serial Terminal Application on my Android device. It displays "Connected" once the connection
+goes into the credit based data exchange phase.
+
+## RFCOMM and credit based communication
+
+RFCOMM interactions are credit based. I think the communication partner grants the client credits and once
+the credits are used up, the packets are not consumed any more. I think credits can be replenished by
+asking for more credit. I have not fully understood how it works yet. This application will not
+replenish credits so the communication will fail pretty quickly after the first few messages are exchanged!

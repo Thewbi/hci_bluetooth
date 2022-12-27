@@ -31,6 +31,36 @@
     <Filter Include="Quelldateien\sdp">
       <UniqueIdentifier>{53977dbc-465a-4717-a8b3-86ec3b5cceb4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Headerdateien\usb">
+      <UniqueIdentifier>{93a9e285-e70f-4421-b03d-3cd8c35f3b73}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Quelldateien\usb">
+      <UniqueIdentifier>{6db946f3-526c-46c8-8ab4-edd127e2eca2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headerdateien\hci">
+      <UniqueIdentifier>{1f5087fe-da94-48bd-8037-01fae220c8db}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Quelldateien\hci">
+      <UniqueIdentifier>{9032ca22-b4e1-4d9b-a788-4fcaa240292a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headerdateien\l2cap">
+      <UniqueIdentifier>{1a7801c9-e75d-4c8b-a464-8a5143c49130}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Quelldateien\l2cap">
+      <UniqueIdentifier>{73512383-b6ce-4489-ba14-7005b414f169}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Quelldateien\ezusb">
+      <UniqueIdentifier>{517a0231-d73e-446c-8fe7-101da8623e2c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headerdateien\ezusb">
+      <UniqueIdentifier>{c296dcb9-f5a2-40f9-993b-3457040d29f6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headerdateien\xgetopt">
+      <UniqueIdentifier>{ce47fbb3-466e-4f00-a334-5e724915261c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Quelldateien\xgetopt">
+      <UniqueIdentifier>{739af499-6006-43be-9944-621dc9ec739e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="hci_test.cpp">
@@ -51,17 +81,35 @@
     <ClCompile Include="sdp_test.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="hci.cpp">
+    <ClCompile Include="hci\hci.cpp">
+      <Filter>Quelldateien\hci</Filter>
+    </ClCompile>
+    <ClCompile Include="usb\usb_device.cpp">
+      <Filter>Quelldateien\usb</Filter>
+    </ClCompile>
+    <ClCompile Include="l2cap\l2cap.cpp">
+      <Filter>Quelldateien\l2cap</Filter>
+    </ClCompile>
+    <ClCompile Include="hci\link_key_database.cpp">
+      <Filter>Quelldateien\hci</Filter>
+    </ClCompile>
+    <ClCompile Include="hci\link_key_database_test.cpp">
+      <Filter>Quelldateien\hci</Filter>
+    </ClCompile>
+    <ClCompile Include="usb\usb_device_factory.cpp">
+      <Filter>Quelldateien\usb</Filter>
+    </ClCompile>
+    <ClCompile Include="usb\usb-human-name.cpp">
+      <Filter>Quelldateien\usb</Filter>
+    </ClCompile>
+    <ClCompile Include="fxload.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="link_key_database.cpp">
-      <Filter>Quelldateien</Filter>
+    <ClCompile Include="..\..\..\..\ezusb\ezusb.cpp">
+      <Filter>Quelldateien\ezusb</Filter>
     </ClCompile>
-    <ClCompile Include="link_key_database_test.cpp">
-      <Filter>Quelldateien</Filter>
-    </ClCompile>
-    <ClCompile Include="l2cap.cpp">
-      <Filter>Quelldateien</Filter>
+    <ClCompile Include="..\..\..\..\xgetopt\XGetopt.cpp">
+      <Filter>Quelldateien\xgetopt</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -71,23 +119,38 @@
     <ClInclude Include="..\..\..\..\apple_pklg\pklg.h">
       <Filter>Headerdateien\apple_pklg</Filter>
     </ClInclude>
-    <ClInclude Include="hci.h">
-      <Filter>Headerdateien</Filter>
-    </ClInclude>
     <ClInclude Include="command_template.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\..\sdp\sdp.h">
       <Filter>Headerdateien\sdp</Filter>
     </ClInclude>
-    <ClInclude Include="link_key_database.h">
-      <Filter>Headerdateien</Filter>
+    <ClInclude Include="hci\hci.h">
+      <Filter>Headerdateien\hci</Filter>
     </ClInclude>
-    <ClInclude Include="link_key_database_test.h">
-      <Filter>Headerdateien</Filter>
+    <ClInclude Include="usb\usb_device.h">
+      <Filter>Headerdateien\usb</Filter>
     </ClInclude>
-    <ClInclude Include="l2cap.h">
-      <Filter>Headerdateien</Filter>
+    <ClInclude Include="l2cap\l2cap.h">
+      <Filter>Headerdateien\l2cap</Filter>
+    </ClInclude>
+    <ClInclude Include="hci\link_key_database.h">
+      <Filter>Headerdateien\hci</Filter>
+    </ClInclude>
+    <ClInclude Include="hci\link_key_database_test.h">
+      <Filter>Headerdateien\hci</Filter>
+    </ClInclude>
+    <ClInclude Include="usb\usb_device_factory.h">
+      <Filter>Headerdateien\usb</Filter>
+    </ClInclude>
+    <ClInclude Include="usb\usb-human-name.h">
+      <Filter>Headerdateien\usb</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\ezusb\ezusb.h">
+      <Filter>Headerdateien\ezusb</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\xgetopt\XGetopt.h">
+      <Filter>Headerdateien\xgetopt</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

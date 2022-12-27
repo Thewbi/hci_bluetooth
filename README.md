@@ -1,8 +1,12 @@
 # hci_bluetooth
+
 USB hci bluetooth
 
 Please have a look at Bluekitchens Bluetooth stack. 
 The Bluekitchen stack was used to learn how bluetooth stacks actually work!
+
+If you are using USB or libUSB on windows, then have a look at doc/libusb_on_windows.txt.
+Especially pay attention to the section about Zadig! Zadig will solve a lot of issues.
 
 # What does this repository contain?
 

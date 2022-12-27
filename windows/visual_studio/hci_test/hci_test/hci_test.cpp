@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <intrin.h>
 
 #include <libusb.h>
 #include <windows.h>
@@ -9,16 +10,18 @@
 #include <map>
 #include <vector>
 
-#include "hci.h"
+#include "hci\hci.h"
+#include "hci\link_key_database.h"
 
 #include "libpcap.h"
 #include "pklg.h"
-#include <intrin.h>
 
-#include "sdp.h"
-#include "link_key_database.h"
+#include "sdp\sdp.h"
 
-#include "l2cap.h"
+#include "l2cap\l2cap.h"
+
+#include "usb/usb_device.h"
+#include "usb/usb_device_factory.h"
 
 LinkKeyDatabase link_key_database;
 
@@ -29,7 +32,6 @@ bool authentication_request = false;
 bool mtu_config_request_received = false;
 uint8_t mtu_config_request_command_identifier = 0x00;
 bool mtu_config_request_sent = false;
-
 
 // from btstack/platform/libusb/hci_transport_h2_libusb.c
 
@@ -5263,18 +5265,19 @@ static int usb_send_cmd_packet(uint8_t *packet, int size)
 
 static uint8_t find_dev(libusb_device **devs)
 {
-	libusb_device *dev;
+	libusb_device *libusb_device;
 	int i = 0;
 	int j = 0;
 
-	while ((dev = devs[i++]) != NULL) {
+	int device_index = 0;
+	while ((libusb_device = devs[i++]) != NULL) {
 
 		struct libusb_device_descriptor desc;
 
 		int ret;
 		char string[256];
 
-		int r = libusb_get_device_descriptor(dev, &desc);
+		int r = libusb_get_device_descriptor(libusb_device, &desc);
 		if (r < 0) {
 			fprintf(stderr, "failed to get device descriptor");
 
@@ -5282,7 +5285,8 @@ static uint8_t find_dev(libusb_device **devs)
 			return 0;
 		}
 
-		printf("get [%04X:%04X] device string descriptor \n", desc.idVendor, desc.idProduct);
+		device_index++;
+		printf("%d) get [%04X:%04X] device string descriptor \n", device_index, desc.idVendor, desc.idProduct);
 		printf("iProduct[%d]: ", desc.iProduct);
 
 		if (desc.idVendor == 0x0b05 && desc.idProduct == 0x17cb) {
@@ -5325,7 +5329,7 @@ static uint8_t find_dev(libusb_device **devs)
 			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.snaplen), sizeof(pcap_hdr_copy.snaplen));
 			//file.write(reinterpret_cast<char *>(&pcap_hdr_copy.network), sizeof(pcap_hdr_copy.network));
 
-			ret = libusb_open(dev, &handle);
+			ret = libusb_open(libusb_device, &handle);
 			switch (ret) {
 			case LIBUSB_SUCCESS:
 				printf("libusb_open() succeeded for device [0x%04X:0x%04X] with error [%d] %s\n", desc.idVendor, desc.idProduct, ret, libusb_error_name(ret));
@@ -5344,7 +5348,7 @@ static uint8_t find_dev(libusb_device **devs)
 				continue;
 			}
 
-			scan_for_bt_endpoints(dev);
+			scan_for_bt_endpoints(libusb_device);
 
 			// https://stackoverflow.com/questions/4813764/libusb-basic-example-wanted
 
@@ -5985,9 +5989,115 @@ static uint8_t ng_btsocket_rfcomm_fcs2(uint8_t *data)
 //	return 0;
 //}
 
-int main()
+
+
+
+int main_deactivated()
 {
 	std::cout << "Hello HCI test!" << std::endl;
+
+	// libusb_init returns 0 on success, or a LIBUSB_ERROR code on failure
+	if (libusb_init(&context))
+	{
+		return 1;
+	}
+
+	std::vector<std::shared_ptr<USBDevice>> result;
+
+	// load USB human readable names and creates USB devices
+	USBDeviceFactory usbDeviceFactory("usb.ids");
+
+	// call libusb::libusb_get_device_list()
+	usbDeviceFactory.start(context);
+
+	// retrieve a list of connected USB devices
+	usbDeviceFactory.create(result);
+
+	// pointer to the Cypress EZUSB FX2LP. 04b4:8613
+	std::shared_ptr<USBDevice> fx2lpUSBDevice;
+
+	// pointer to the Cypress EZUSB FX2LP bulkloop device 04b4:1004
+	std::shared_ptr<USBDevice> fx2lpBulkloopUSBDevice;
+
+	std::shared_ptr<USBDevice> currentUSBDevice;
+
+	// output data about all devices
+	for (std::shared_ptr<USBDevice> usbDevice : result)
+	{
+		usbDevice->retrieve_device_information();
+		usbDevice->display_device_information();
+
+		usbDevice->scan_for_bt_endpoints();
+
+		//// 04b4:8613
+		//if ((0x04b4 == usbDevice->get_vendor_id()) && (0x8613 == usbDevice->get_device_id()))
+		//{
+		//	fx2lpUSBDevice = usbDevice;
+		//	currentUSBDevice = usbDevice;
+		//}
+
+		//// 04b4:6570
+		//if ((0x04b4 == usbDevice->get_vendor_id()) && (0x6570 == usbDevice->get_device_id()))
+		//{
+		//	fx2lpUSBDevice = usbDevice;
+		//	currentUSBDevice = usbDevice;
+		//}
+
+		// 04b4:1004
+		if ((0x04b4 == usbDevice->get_vendor_id()) && (0x1004 == usbDevice->get_device_id()))
+		{
+			fx2lpBulkloopUSBDevice = usbDevice;
+			currentUSBDevice = usbDevice;
+			
+		}
+	}	
+
+	if (nullptr != currentUSBDevice && (!currentUSBDevice->is_open()) && (currentUSBDevice->can_be_opened))
+	{
+		libusb_error open_result = currentUSBDevice->open();
+		switch (open_result) 
+		{
+
+		case LIBUSB_SUCCESS:
+		{
+			printf("libusb_open() succeeded for device [0x%04X:0x%04X] with error [%d] %s\n", 
+				currentUSBDevice->get_vendor_id(), currentUSBDevice->get_device_id(),
+				open_result, libusb_error_name(open_result));
+
+			char data[256];
+			libusb_error desc_result = static_cast<libusb_error>(libusb_get_string_descriptor_ascii(handle,
+				currentUSBDevice->get_device_id(), (unsigned char*)data, sizeof(data)));
+			if (desc_result > 0)
+			{
+				printf(data);
+				printf("\n");
+			}
+		}
+		break;
+
+		default:
+			printf("\n\n");
+			printf("libusb_open() failed for device [0x%04X:0x%04X] with error [%d] %s\n", 
+				fx2lpUSBDevice->get_vendor_id(), fx2lpUSBDevice->get_device_id(), open_result, 
+				libusb_error_name(open_result));
+			printf("\n\n");
+			break;			
+		}
+	}
+
+	usbDeviceFactory.stop();
+
+	if (context != nullptr)
+	{
+		libusb_exit(context);
+		context = nullptr;
+	}
+	
+	// 
+	// exit
+	//
+
+	return 0;
 
 	link_key_database.load_from_file("link_key_database.lkd");
 

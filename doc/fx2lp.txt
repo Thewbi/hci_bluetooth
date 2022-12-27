@@ -1,0 +1,896 @@
+= EZ-USB FX2 =
+
+== Compile Test ==
+
+This example contains a binary counter that uses both LEDs.
+
+C:\Users\U5353\WorkspaceCypressEZUsbSDK\testfx2\fw.c
+
+To compile, use the menuoption FX2LP build on the project from
+within "Cypress EZ USB Suite"
+
+To flash, plug in the fx2lp board and then use the "USB Control Center" from within the
+Eclipse flavor "Cypress EZ USB Suite"
+
+
+
+
+
+= Examples =
+
+https://www.infineon.com/cms/en/design-support/software/code-examples/usb-controllers-code-examples/usb-hi-speed-code-examples/?utm_source=cypress&utm_medium=referral&utm_campaign=202110_globe_en_all_integration-code_example
+
+C:\aaa_se\fx2lp
+C:\aaa_se\cypress_firmware
+C:\Users\U5353\WorkspaceCypressEZUsbSDK\testfx2\bulkloop.c
+
+
+
+
+
+
+== The CY7C68013A-56 EZ-USB FX2LP USB 2.0 Board ==
+
+https://www.geeetech.com/wiki/index.php/CY7C68013
+
+CY7C68013A-56 EZ-USB FX2LP USB2.0 Develope Board Module Logic Analyzer EEPROM
+
+The chip on this board is labeled:
+
+CY7C68013A-56PVXC
+B  04 CHI 1325
+CYP 628123
+
+The -56 postfix stands for the 56 pin package.
+There are also 100 and 128 pin package.
+
+As answered in this question:
+https://community.infineon.com/t5/USB-low-full-high-speed/CY7C68013A-56-pin-UART/td-p/172585?start=0&tstart=0
+"The 56 pin package does not have UART. The page 55 / 67 of the datasheet in the link http://www.cypress.com/?docID=27092 has this information"
+and also outlined in this tutorial:
+http://www.colecovision.eu/mcs51/CY7C68013A%20EZ-USB%20FX2LP%20USB2.0%20Development%20Board%20Serial.shtml
+"Since the versions of the FX2LP with low pin-count do not have an UART, we need to emulate one in software. Here is the C code:"
+The 56 pin package is considered the low pin-count variant.
+It does not have a UART exposed!
+
+
+
+
+
+
+
+== UART ==
+
+WARNING:
+As answered in this question:
+https://community.infineon.com/t5/USB-low-full-high-speed/CY7C68013A-56-pin-UART/td-p/172585?start=0&tstart=0
+"The 56 pin package does not have UART. The page 55 / 67 of the datasheet in the link http://www.cypress.com/?docID=27092 has this information"
+and also outlined in this tutorial:
+http://www.colecovision.eu/mcs51/CY7C68013A%20EZ-USB%20FX2LP%20USB2.0%20Development%20Board%20Serial.shtml
+"Since the versions of the FX2LP with low pin-count do not have an UART, we need to emulate one in software. Here is the C code:"
+The 56 pin package is considered the low pin-count variant.
+It does not have a UART exposed!
+
+This cannot be used since the -56 pin board does not have UARTs!
+
+http://www.colecovision.eu/mcs51/CY7C68013A%20EZ-USB%20FX2LP%20USB2.0%20Development%20Board%20Serial.shtml
+
+AN58009 - Serial (UART) Port Debugging of EZ-USB® FX1/FX2LP™ Firmware
+
+There are two serial ports on the FX2LP development board: SIO-0 and SIO-1.
+On the development board CY7C68013A-56, the serial ports are exposed via:
+
+Example for the 56 pin development board:
+
+In EZUSB Studio:
+- File > New > Project... > FX2LP Project > Next
+- Project Name: software_serial
+- Create the project using one of the templates: Bulkloop_SDCC
+- Finish
+
+Perform a testbuild:
+- Open the context menu on the software_serial project
+- Select: "FX2LP Build"
+- In the console, the app should build without errors
+
+Programming:
+The main function is contained in fw.c
+Comment out the entire fw.c file and paste the code from the tutorial:
+http://www.colecovision.eu/mcs51/CY7C68013A%20EZ-USB%20FX2LP%20USB2.0%20Development%20Board%20Serial.shtml
+
+Clean the project
+Rebuild the project.
+The console has to output:
+Building target: software_serial.hex
+The file software_serial.hex has to be located here:
+
+C:\Users\U5353\WorkspaceCypressEZUsbSDK\software_serial\Release\software_serial.hex
+
+Plug in the Devboard.
+Use the USB Control center to download the software_serial.hex to the RAM.
+Program > FX2 > RAM > Select the file software_serial.hex > OK
+
+Plug in a USB_Serial Cable (USB to TTL) adapter into the PC.
+Connect the RXD pin to the EZUSB PA0 pin using a jumper wire.
+Do not connect VCC between the EZUSB and the TTL adapter.
+The EZUSB Is powered via USB and the TTL adapter also gets it's own 
+power via USB.
+
+As baud rate select 1200
+As end of line select a single LF character
+
+```
+// Source code under CC0 1.0
+#include <stdbool.h>
+#include <stdio.h>
+
+__sfr __at(0x80) IOA;
+__sfr __at(0xb2) OEA;
+
+__sfr __at(0x88) TCON;
+__sfr __at(0x89) TMOD;
+__sfr __at(0x8b) TL1;
+__sfr __at(0x8d) TH1;
+
+__sfr __at(0xa8) IE;
+
+volatile unsigned char sendcounter;
+volatile unsigned int senddata;
+volatile _Bool sending;
+
+void send_bit(void) __interrupt(3)
+{
+	TH1 = (65536 - 833) / 256;
+	TL1 = (65536 - 833) % 256;
+
+	if(!sending)
+	{
+		return;
+	}
+
+	// write the next bit onto the output pin
+	IOA = senddata & 1;
+
+	// a bit has been transmitted, shift over to the next bit in line
+	senddata >>= 1;
+
+	if (!--sendcounter)
+	{
+		sending = false;
+		IE &= ~0x08;
+	}
+}
+
+int putchar(int c)
+{
+	while(sending)
+	{
+		;
+	}
+
+	senddata = (c << 1) | 0x200;
+
+	// for an eight bit byte, UART sends 10 bit because
+	// there are two bit management data required for starting
+	// a new character
+	sendcounter = 10;
+
+	sending = true;
+	IE |= 0x08;
+
+	return (c);
+}
+
+void main(void)
+{
+	unsigned long int i = 0;
+
+	// Configure timer for 1200 baud
+	TH1 = (65536 - 833) / 256;
+	TL1 = (65536 - 833) % 256;
+	TMOD = 0x10;
+	IE |= 0x80;
+	TCON |= 0x40; // Start timer
+
+	OEA=0x01; // port A as output
+
+
+	for(;;)
+	{
+		printf("Hello World!\n");
+
+		// Sleep
+		for(i = 0; i < 147456; i++)
+		{
+			;
+		}
+	}
+}
+```
+
+Another UART example is contained in the github repository for the FX2 Lib.
+The FX2 Lib example even supports sending and receiving data.
+
+
+== GPIF ==
+
+The GPIF is documented in the Application Note AN66806
+"Getting Started with EZ-USB® FX2LP™ GPIF"
+
+https://www.infineon.com/dgdl/Infineon-AN66806_Getting_Started_with_EZ-USB_FX2LP_GPIF-ApplicationNotes-v09_00-EN.pdf?fileId=8ac78c8c7cdc391c017d0735e06f5911
+
+FX2LP General Programmable Interface (GPIF) provides an independent hardware unit that 
+creates the data and control signals required by an external interface. 
+The GPIF can move data using CPU reads and writes to GPIF registers
+
+My Questions:
+What is the point of GPIF?
+When would you use the GPIF?
+Why not just write Firmware, why is there a GPIF editor?
+What is a GPIF Waveform?
+
+
+
+
+
+
+== EZ-USB FX2 registers ==
+
+Registers are mapped into memory and hence are accessible by writing to 
+specific addresses.
+
+
+
+
+
+
+== Pins and Special Function Registers (SFR) ==
+
+The EZUSB FX2 Technical Reference Manual contains a table 11-5 (and also 15-1) of all
+FX2 special function registers.
+
+x 8x 	9x 			Ax 				Bx 					Cx 		Dx 		Ex 		Fx
+0 IOA 	IOB 		IOC 			IOD 				SCON1 	PSW 	ACC 	B
+1 SP 	EXIF 		INT2CLR 		IOE 				SBUF1
+2 DPL0 	MPAGE 		INT4CLR 		OEA
+3 DPH0 								OEB
+4 DPL1		 						OEC
+5 DPH1 								OED
+6 DPS 								OEE
+7 PCON
+8 TCON 	SCON0 		IE 				IP 					T2CON 	EICON 	EIE 	EIP
+9 TMOD 	SBUF0
+A TL0 	AUTOPTRH1 	EP2468STAT 		EP01STAT 			RCAP2L
+B TL1 	AUTOPTRL1 	EP24FIFOFLGS 	GPIFTRIG 			RCAP2H
+C TH0 				EP68FIFOFLGS 						TL2
+D TH1 	AUTOPTRH2 					GPIFSGLDATH 		TH2
+E CKCON AUTOPTRL2 					GPIFSGLDATLX
+F 					AUTOPTRSETUP 	GPIFSGLDATLNOX
+
+Pins are grouped into so called ports.
+
+There are 5 ports. They are port A through E.
+See EZ-USB FX2 Technical Reference Manual v2.1 on page 13-4
+
+There are symbolic names defined for pins.
+The symbolic names also contain the port name of the port that contains the pin.
+
+PA0 - (P)ort (A) Pin (0) - Pin 0 inside Port A 
+PA1 - (P)ort (A) Pin (1) - Pin 1 inside Port A
+
+Pins can be configured as inputs or outputs.
+A port is represented in software, as a numeric value.
+E.g. Port A is represented by OEA.
+
+This allows for two ways to configure pins as inputs or outputs.
+1. Change the bits inside OEA
+2. Write to the symbolic pin names.
+
+A value of 0 makes a pin an input.
+A value of 1 makes a pin an output
+
+
+
+
+== Application Architecture ==
+
+=== Task Dispatcher Hooks (TD_) ===
+
+TD_ stand for task dispatcher.
+
+TD_ functions are hooks into the task dispatcher.
+A hook is a function that is executed by a larger system
+so that clients can execute their own code in response to the
+state changes of the said larger system.
+
+There are several TD_ hooks which you can implement when needed.
+
+TD_Init() is called once on firmware startup.
+
+==== TD_Init() ====
+
+```
+void TD_Init(void)             // Called once at startup
+{ ... }
+```
+
+An example of a TD_Init() implementation is given in AN66806 - Getting Started with EZ-USB® FX2LP™ GPIF
+
+```
+// Called once at startup
+void TD_Init(void) 
+{
+	// set the CPU clock to 48MHz
+	CPUCS = ((CPUCS & ~bmCLKSPD) | bmCLKSPD1);
+	SYNCDELAY;
+	EP2CFG = 0xA0; // EP2OUT, bulk, size 512, 4x buffered
+	SYNCDELAY;
+	EP4CFG = 0x00; // EP4 not valid
+	SYNCDELAY;
+	EP6CFG = 0xE0; // EP6IN, bulk, size 512, 4x buffered
+	SYNCDELAY;
+	EP8CFG = 0x00; // EP8 not valid
+	SYNCDELAY;
+	EP2FIFOCFG = 0x01; // manual mode, disable PKTEND zero length send, word ops
+	SYNCDELAY;
+	EP6FIFOCFG = 0x01; // manual mode, disable PKTEND zero length send, word ops
+
+	SYNCDELAY;
+	FIFORESET = 0x80; // set NAKALL bit to NAK all transfers from host
+	SYNCDELAY;
+	FIFORESET = 0x02; // reset EP2 FIFO
+	SYNCDELAY;
+	FIFORESET = 0x06; // reset EP6 FIFO
+	SYNCDELAY;
+	FIFORESET = 0x00; // clear NAKALL bit to resume normal operation
+	SYNCDELAY;
+	// out endpoints do not come up armed
+	// because EP2OUT is quad buffered, write dummy byte counts four times
+	EP2BCL = 0x80; // arm EP2OUT by writing byte count w/skip.
+	SYNCDELAY;
+	EP2BCL = 0x80;
+	SYNCDELAY;
+	EP2BCL = 0x80;
+	SYNCDELAY;
+	EP2BCL = 0x80;
+	SYNCDELAY;
+	GpifInit (); // initialize GPIF registers
+	
+	// reset the external FIFO
+	OEA |= 0x04; // turn on PA2 as output pin
+	IOA |= 0x04; // pull PA2 high initially
+	IOA &= 0xFB; // bring PA2 low
+	EZUSB_Delay(1); // keep PA2 low for ~1ms, more than enough time
+	IOA |= 0x04; // bring PA2 high
+```
+
+```
+void TD_Poll(void)              // Called repeatedly while the device is idle
+{ ... }
+```
+
+```
+BOOL TD_Suspend(void)          // Called before the device goes into suspend mode
+{ ... }
+```
+
+```
+BOOL TD_Resume(void)          // Called after the device resumes
+{ ... }
+```
+
+
+=== Device Request hooks (DR_) ===
+
+BOOL DR_GetDescriptor(void)
+
+BOOL DR_SetConfiguration(void)   // Called when a Set Configuration command is received
+
+BOOL DR_GetConfiguration(void)   // Called when a Get Configuration command is received
+
+BOOL DR_SetInterface(void)       // Called when a Set Interface command is received
+
+BOOL DR_GetInterface(void)       // Called when a Set Interface command is received
+
+BOOL DR_GetStatus(void)
+
+BOOL DR_ClearFeature(void)
+
+BOOL DR_SetFeature(void)
+
+BOOL DR_VendorCmnd(void)
+
+
+
+=== USB Interrupt Handlers ===
+
+// Setup Data Available Interrupt Handler
+void ISR_Sudav(void) __interrupt 0
+
+// Setup Token __interrupt Handler
+void ISR_Sutok(void) __interrupt 0
+
+void ISR_Sof(void) __interrupt 0
+
+void ISR_Ures(void) __interrupt 0
+
+void ISR_Susp(void) __interrupt 0
+
+void ISR_Highspeed(void) __interrupt 0
+
+void ISR_Ep0ack(void) __interrupt 0
+{
+}
+void ISR_Stub(void) __interrupt 0
+{
+}
+void ISR_Ep0in(void) __interrupt 0
+{
+}
+void ISR_Ep0out(void) __interrupt 0
+{
+}
+void ISR_Ep1in(void) __interrupt 0
+{
+}
+void ISR_Ep1out(void) __interrupt 0
+{
+}
+void ISR_Ep2inout(void) __interrupt 0
+{
+}
+void ISR_Ep4inout(void) __interrupt 0
+{
+}
+void ISR_Ep6inout(void) __interrupt 0
+{
+}
+void ISR_Ep8inout(void) __interrupt 0
+{
+}
+void ISR_Ibn(void) __interrupt 0
+{
+}
+void ISR_Ep0pingnak(void) __interrupt 0
+{
+}
+void ISR_Ep1pingnak(void) __interrupt 0
+{
+}
+void ISR_Ep2pingnak(void) __interrupt 0
+{
+}
+void ISR_Ep4pingnak(void) __interrupt 0
+{
+}
+void ISR_Ep6pingnak(void) __interrupt 0
+{
+}
+void ISR_Ep8pingnak(void) __interrupt 0
+{
+}
+void ISR_Errorlimit(void) __interrupt 0
+{
+}
+void ISR_Ep2piderror(void) __interrupt 0
+{
+}
+void ISR_Ep4piderror(void) __interrupt 0
+{
+}
+void ISR_Ep6piderror(void) __interrupt 0
+{
+}
+void ISR_Ep8piderror(void) __interrupt 0
+{
+}
+void ISR_Ep2pflag(void) __interrupt 0
+{
+}
+void ISR_Ep4pflag(void) __interrupt 0
+{
+}
+void ISR_Ep6pflag(void) __interrupt 0
+{
+}
+void ISR_Ep8pflag(void) __interrupt 0
+{
+}
+void ISR_Ep2eflag(void) __interrupt 0
+{
+}
+void ISR_Ep4eflag(void) __interrupt 0
+{
+}
+void ISR_Ep6eflag(void) __interrupt 0
+{
+}
+void ISR_Ep8eflag(void) __interrupt 0
+{
+}
+void ISR_Ep2fflag(void) __interrupt 0
+{
+}
+void ISR_Ep4fflag(void) __interrupt 0
+{
+}
+void ISR_Ep6fflag(void) __interrupt 0
+{
+}
+void ISR_Ep8fflag(void) __interrupt 0
+{
+}
+void ISR_GpifComplete(void) __interrupt 0
+{
+}
+void ISR_GpifWaveform(void) __interrupt 0
+{
+}
+
+
+
+
+
+== Combine with ADF435X ==
+
+https://www.youtube.com/watch?v=xJ0Mfuj0KUQ
+Timestamp 11:30
+
+The EZUSB is run with the firmware for the ADF435X evaluation board.
+That firmware executes SPI on the EZUSB to control the ADF435X.
+
+The interesting part is that the EZUSB 56-pin package chip has no UART.
+The Cypress Application Note about bit-banging SPI uses the UART.
+
+This means that the evaluation board firmware has implemented SPI without
+UART deviating from the Cypress Application Note.
+
+They wrote their own SPI bitbanging protocol.
+
+There is a repository on github that shows how to do this:
+
+https://github.com/jhol/pyadf435x
+
+
+=== EZ USB ===
+Out of the EZ USB (for the original firmware (not for the pyadf435x firmware))
+3 SPI lines:
+Clock
+Data
+Chip Select
+
+The pins used are: CLT1, CLT2, PA0 but I do not know
+which pins are Clock Data and Chip Select.
+
+=== ADF345X ===
+ADF345X is powered by 3.3 volts which are delivered by the EZUSB.
+The signal comes out of the OUT+ connector. 
+
+
+
+
+
+
+
+
+
+== FX2 Lib ==
+
+https://github.com/djmuhlestein/fx2lib
+
+A github project that describes itself:
+
+Library routines for creating firmware for the Cypress FX2 (CY7C68013 and variants) with SDCC
+
+
+
+```
+void handle_setupdata() {
+
+}
+```
+
+
+=== Running the FX2 Lib examples ===
+
+It is possible even on windows:
+
+Make sure SDCC is installed and available via the PATH.
+Install cygwin or mingw for the make tools.
+Install git or a graphical git client like fork.
+
+Clone FX2lib using fork or the git command line
+
+```
+git clone https://github.com/djmuhlestein/fx2lib.git
+```
+
+Navigate to one of the example folders:
+
+```
+cd C:\aaa_se\fx2lp\fx2lib\examples\serial
+```
+
+Run make
+
+```
+make
+```
+
+A folder called build is created containing the firmware file serial.ihx.
+
+Plug in the EZUSB FX2LP dev board.
+
+The USB Control Center cannot be used to upload a .ihx file!!!!
+NOT WORKING for .ihx files:
+Open the USB Control Center > Select the entry for the FX2LP.
+Program > FX2 > RAM > 
+
+Make sure i686-pc-msys-gcc is installed.
+Go to your setup-x86_64.exe cygwin setup .exe (Mine is in the Downloads Folder)
+Run setup-x86_64.exe.
+
+Install mingw-w64-i686-gcc
+
+pacman -S mingw-w64-i686-gcc
+
+
+python C:\aaa_se\fx2lp\fx2lib\examples\fx2\setup.py
+
+
+
+
+== Downloading .ihx files ==
+
+.ihx stands for intel hex file: https://de.wikipedia.org/wiki/Intel_HEX
+
+Another valid file extension is .hex
+
+The USB Control Center can program Intel Hex Format files.
+To program a .ihx file with the USB Control center, change the file
+extension from .ihx to .hex since the file selection dialog was 
+programmed to filter for .hex files only! This is the only reason
+why it won't accept .ihx files. .hex and .ihx is the same thing!
+
+
+Use cycfx2prog prg:led.ihx
+
+cycfx2prog is not available on windows!
+There is port here: https://github.com/tai/cycfx2prog-win32
+But even if you get this port to compile on windows, the .exe will not be able
+to open the USB device and it will fail with the message: 
+Failed to open device: Operation not supported or unimplemented on this platform
+
+Use Zadig to replace the driver by a WinUSB driver.
+Zadig says: Driver installation failed: FAILED (system policy has been modified to reject unsigned drivers)
+ZADIG requested resource busy or similar call already in progress
+
+Signed drivers here: https://community.infineon.com/t5/Knowledge-Base-Articles/Drivers-for-EZ-USB-FX1-FX2LP-and-FX3-KBA94413/ta-p/248634
+
+Download the libusb-1.0 binaries from source forge:
+
+https://sourceforge.net/projects/libusb/files/libusb-1.0/libusb-1.0.26/libusb-1.0.26-binaries.7z/download
+
+Modified make file:
+
+```
+#LIBUSB = /c/src/libusb
+
+#C:\aaa_se\libusb
+#LIBUSB = /c/aaa_se/libusb
+
+#C:\Users\U5353\Downloads\libusb-1.0.26-binaries\libusb-cygwin-x64
+#LIBUSB = /c/Users/U5353/Downloads/libusb-1.0.26-binaries/libusb-cygwin-x64
+LIBUSB = /c/Users/U5353/Downloads/libusb-1.0.26-binaries/libusb-MinGW-Win32
+
+#LIBUSB = /c/Users/U5353/Downloads/libusb-1.0.26-binaries/libusb-MinGW-x64/lib
+
+CC = gcc -pipe
+VERSION = 0.47
+#CFLAGS = -O2 -fno-rtti -fno-exceptions -DCYCFX2PROG_VERSION=\"$(VERSION)\" -W -Wall -Wformat -I$(LIBUSB)/libusb
+CFLAGS = -O2 -fno-rtti -fno-exceptions -DCYCFX2PROG_VERSION=\"$(VERSION)\" -W -Wall -Wformat -I$(LIBUSB)/include/libusb-1.0
+#LDFLAGS = -L$(LIBUSB)/libusb/.libs -lusb-1.0
+LDFLAGS = -L$(LIBUSB)/lib -lusb-1.0
+DIST_DEST = cycfx2prog-$(VERSION)
+
+...
+
+Rest of makefile here:
+```
+
+cycfx2prog.exe
+
+libusb-1.0.dll is here: C:\Users\U5353\Downloads\libusb-1.0.26-binaries\VS2015-Win32\dll\libusb-1.0.dll
+
+ERROR:
+C:\aaa_se\fx2lp\cycfx2prog-win32>cycfx2prog.exe
+Using ID 04b4:8613 on 001.012.
+Failed to open device: Operation not supported or unimplemented on this platform
+
+
+
+
+== Downloading .hex files ==
+
+Use the USB Command Center
+
+
+
+
+
+= Driver (Chaos) =
+
+https://github.com/pbatard/libwdi/issues/78
+
+QUESTION:
+hi, i am using a FPGA-board with a CY7 (usb communication IC). CY7 has an app(called Control Center) to prog it. after programing, it is ready to transfer data.
+in the other hand, i code a Qt app based on libusb. the problem is:
+Control Center need windows Driver. but for libusb, it want to uninstall it and replace his Driver(by zadig) .
+how can open a usb with libusb without uninstalling it's Driver from windows?
+thanks
+
+ANSWER:
+how can open a usb with libusb without uninstalling it's Driver from windows?
+
+You can't. Because it is a generic library, libusb requires the use of a generic driver, 
+such as WinUSB, libusb0 or libusbK. The driver from Cypress is specific to this device 
+and doesn't offer the generic function calls that libusb requires, so it can't be used 
+with libusb. This means that either you use libusb or you use the Cypress software, but 
+you can't use both without having to switch drivers every time.
+
+The other thing you can do, if you can, and which would help a lot of people, would be 
+to help create an Open Source equivalent for the Cypress proprietary transfer software, 
+so that you can use libusb all the way. Something like this has already been done for 
+Cypress FX chips (see ezusb.c and fxload.c in the libusb example's directory).
+
+By the way, this question would be better directed at the libusb project rather than at 
+libwdi, since it relates to libusb usage, so I will close this issue.
+
+
+
+
+= fxload =
+
+For some wierd reason, the libusb repository contains an example called fxload which is a
+flasher app for the fx2lp amongst other cypress devices! fxload can load intel hex binaries (.hex or .ihx)
+
+fxload works on Macos without issues.
+
+```
+./fxload -v -i /Users/bischowg/dev/usb/fx2lib/examples/bulkloop/build/bulkloop.ihx -d 04b4:8613 -t fx2lp
+```
+
+-i specifies the intel hex file to upload
+-d is the VendorID:DeviceID combination (check for a Cypress devices with lsusb or the device Manager)
+-t is the type of device to program
+-v is verbose output
+
+The problem with fxload is that on windows it needs the WinUSB driver installed for the Cypress EZUSB fx2lp board.
+To install the WinUSB driver, the Zadig tool is used.
+On the coorporate windows laptop, there is some security policy in place which prevents Zadig from installing the WinUSB driver.
+
+Usage: fxload [-v] [-V] [-t type] [-d vid:pid] [-p bus,addr] [-s loader] -i firmware
+  -i <path>       -- Firmware to upload
+  -s <path>       -- Second stage loader
+  -t <type>       -- Target type: an21, fx, fx2, fx2lp, fx3
+  -d <vid:pid>    -- Target device, as an USB VID:PID
+  -p <bus,addr>   -- Target device, as a libusb bus number and device address path
+  -v              -- Increase verbosity
+  -q              -- Decrease verbosity (silent mode)
+  -V              -- Print program version
+
+cd C:\aaa_se\hci_bluetooth\windows\visual_studio\hci_test\x64\Debug
+
+hci_test.exe
+
+hci_test.exe -v
+
+hci_test.exe -v -V
+
+hci_test.exe -v -i C:\aaa_se\fx2lp\fx2lib\examples\bulkloop\build\bulkloop.hex -d 04B4:8613
+
+
+
+
+= ERROR: zadig system policy has been modified to reject unsigned drivers =
+
+Deinstall all installed drivers for the EZUSB fx2lp.
+Restart windows.
+Plug in the FX2LP.
+Start Zadiq as admin.
+Use Zadig to install the WinUSB driver for the unknown device.
+
+zadig system policy has been modified to reject unsigned drivers
+Driver Installation: FAILED (System policy has been modified to reject unsigned drivers)
+
+
+windows 10 disable driver signature enforcement
+
+Zadig 2.7.765
+Windows 10 Enterprise, 64-bit (Build 17763.615)
+ini file 'zadig.ini' not found in 'C:\Users\U5353\Downloads' - default parameters will be used
+default driver set to 'WinUSB'
+0 devices found.
+10 devices found.
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_1038&PID_1369&REV_0114&MI_01
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_03&SubClass_01&Prot_02
+libwdi:debug [wdi_create_list] Driver version: 10.0.17763.379
+libwdi:debug [wdi_create_list] HidUsb USB device (1): USB\VID_1038&PID_1369&MI_01\7&34D777CE&0&0001
+libwdi:debug [wdi_create_list] Device description: 'Sensei Raw Gaming Mouse (Interface 1)'
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_0B0E&PID_0311&REV_0000
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_03&SubClass_00&Prot_00
+libwdi:debug [wdi_create_list] Driver version: 10.0.17763.379
+libwdi:debug [wdi_create_list] HidUsb USB device (3): USB\VID_0B0E&PID_0311\70BF92403B52
+libwdi:debug [wdi_create_list] Device description: 'Jabra EVOLVE 65'
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_04B4&PID_8613&REV_:001
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_FF&SubClass_FF&Prot_FF
+libwdi:debug [wdi_create_list] Driver version: 1.2.3.20
+libwdi:debug [wdi_create_list] CYUSB3 USB device (4): USB\VID_04B4&PID_8613\5&1262A0AE&0&1
+libwdi:debug [wdi_create_list] Device description: 'Cypress FX2LP No EEPROM Device'
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_1038&PID_1369&REV_0114&MI_02
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_03&SubClass_01&Prot_01
+libwdi:debug [wdi_create_list] Driver version: 10.0.17763.379
+libwdi:debug [wdi_create_list] HidUsb USB device (6): USB\VID_1038&PID_1369&MI_02\7&34D777CE&0&0002
+libwdi:debug [wdi_create_list] Device description: 'Sensei Raw Gaming Mouse (Interface 2)'
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_1199&PID_9041&REV_0006&MI_0c
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_02&SubClass_0e&Prot_00
+libwdi:debug [wdi_create_list] Driver version: 10.0.17763.348
+libwdi:debug [wdi_create_list] cxwmbclass USB device (7): USB\VID_1199&PID_9041&MI_0C\6&28293E17&1&000C
+libwdi:debug [wdi_create_list] Device description: 'EM7305 (Interface 12)'
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_1038&PID_1369&REV_0114&MI_03
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_03&SubClass_00&Prot_01
+libwdi:debug [wdi_create_list] Driver version: 10.0.17763.379
+libwdi:debug [wdi_create_list] HidUsb USB device (8): USB\VID_1038&PID_1369&MI_03\7&34D777CE&0&0003
+libwdi:debug [wdi_create_list] Device description: 'Sensei Raw Gaming Mouse (Interface 3)'
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_04F2&PID_B5B9&REV_3217&MI_00
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_0e&SubClass_03&Prot_00
+libwdi:debug [wdi_create_list] Driver version: 10.0.17763.404
+libwdi:debug [wdi_create_list] usbvideo USB device (11): USB\VID_04F2&PID_B5B9&MI_00\6&2A36690B&0&0000
+libwdi:debug [wdi_create_list] Device description: 'FJ Camera (Interface 0)'
+libwdi:debug [wdi_create_list] Hardware ID: USB\Vid_04f3&Pid_9999&MI_00
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_03&SubClass_01
+libwdi:debug [wdi_create_list] Driver version: 10.0.17763.379
+libwdi:debug [wdi_create_list] HidUsb USB device (12): USB\VID_04F3&PID_9999&MI_00\6&12BF07D4&0&12345
+libwdi:debug [wdi_create_list] Device description: 'Elan Virtual Mouse (Interface 0)'
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_8087&PID_0A2B&REV_0010
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_E0&SubClass_01&Prot_01
+libwdi:debug [wdi_create_list] Driver version: 20.40.0.3
+libwdi:debug [wdi_create_list] BTHUSB USB device (13): USB\VID_8087&PID_0A2B\5&1262A0AE&0&7
+libwdi:debug [wdi_create_list] Device description: 'Intel(R) Wireless Bluetooth(R)'
+libwdi:debug [wdi_create_list] Hardware ID: USB\VID_1038&PID_1369&REV_0114&MI_00
+libwdi:debug [wdi_create_list] Compatible ID: USB\Class_03&SubClass_00&Prot_00
+libwdi:debug [wdi_create_list] Driver version: 10.0.17763.379
+libwdi:debug [wdi_create_list] HidUsb USB device (15): USB\VID_1038&PID_1369&MI_00\7&34D777CE&0&0000
+libwdi:debug [wdi_create_list] Device description: 'Sensei Raw Gaming Mouse (Interface 0)'
+Using inf name: Cypress_FX2LP_No_EEPROM_Device.inf
+Could not extract files
+Driver Installation: FAILED (System policy has been modified to reject unsigned drivers)
+libwdi:info [wdi_prepare_driver] K driver available - adding the libusbK DLLs to the libusb-win32 inf
+libwdi:info [extract_binaries] Successfully extracted driver files to 'C:\Users\U5353\usb_driver'
+libwdi:info [wdi_prepare_driver] Successfully created 'C:\Users\U5353\usb_driver\Cypress_FX2LP_No_EEPROM_Device.inf'
+libwdi:info [wdi_prepare_driver] Creating and self-signing a .cat file...
+libwdi:info [wdi_prepare_driver] Test signing is: Disabled
+libwdi:debug [AddFileHash] 'libusb0.dll': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\amd64\libusb0.dll'
+libwdi:debug [AddFileHash] 'libusb0.sys': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\amd64\libusb0.sys'
+libwdi:debug [AddFileHash] 'libusb0_x86.dll': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\amd64\libusb0_x86.dll'
+libwdi:debug [AddFileHash] 'libusbk.dll': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\amd64\libusbk.dll'
+libwdi:debug [AddFileHash] 'libusbk_x86.dll': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\amd64\libusbk_x86.dll'
+libwdi:debug [AddFileHash] 'cypress_fx2lp_no_eeprom_device.inf': INF type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\cypress_fx2lp_no_eeprom_device.inf'
+libwdi:debug [AddFileHash] 'libusb0.dll': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\x86\libusb0.dll'
+libwdi:debug [AddFileHash] 'libusb0.sys': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\x86\libusb0.sys'
+libwdi:debug [AddFileHash] 'libusb0_x86.dll': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\x86\libusb0_x86.dll'
+libwdi:debug [AddFileHash] 'libusbk.dll': PE type
+libwdi:info [ScanDirAndHash] added hash for 'C:\Users\U5353\usb_driver\x86\libusbk.dll'
+libwdi:info [CreateCat] Successfully created file 'C:\Users\U5353\usb_driver\Cypress_FX2LP_No_EEPROM_Device.cat'
+libwdi:debug [CreateSelfSignedCert] Set Enhanced Key Usage, URL and CPS
+libwdi:warning [CreateSelfSignedCert] Could not obtain a key container: Object already exists. (0x8009000F)
+libwdi:error [wdi_prepare_driver] Could not sign cat file

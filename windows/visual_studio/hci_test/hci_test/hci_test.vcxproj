@@ -23,32 +23,32 @@
     <ProjectGuid>{6186AEA3-A303-4E0B-A281-6392ED8D19B1}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>hcitest</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -75,8 +75,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\aaa_se\hci_bluetooth\xgetopt;C:\aaa_se\hci_bluetooth\ezusb;C:\aaa_se\hci_bluetooth\sdp;C:\aaa_se\hci_bluetooth;C:\aaa_se\hci_bluetooth\apple_pklg;C:\aaa_se\hci_bluetooth\libpcap;C:\aaa_se\libusb\libusb;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\aaa_se\hci_bluetooth\windows\libusb-1.0.26-binaries\VS2015-x64\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\aaa_se\hci_bluetooth\xgetopt;C:\aaa_se\hci_bluetooth\ezusb;C:\aaa_se\hci_bluetooth\sdp;C:\aaa_se\hci_bluetooth;C:\aaa_se\hci_bluetooth\apple_pklg;C:\aaa_se\hci_bluetooth\libpcap;C:\aaa_se\libusb-1.0.27\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\aaa_se\libusb-1.0.27\VS2022\MS64\static;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>

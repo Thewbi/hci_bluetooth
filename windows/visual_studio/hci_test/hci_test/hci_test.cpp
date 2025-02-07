@@ -5282,7 +5282,7 @@ static uint8_t find_dev(libusb_device **devs)
 			fprintf(stderr, "failed to get device descriptor");
 
 			libusb_exit(NULL);
-			return 0;
+			return 1;
 		}
 
 		device_index++;
@@ -5303,7 +5303,7 @@ static uint8_t find_dev(libusb_device **devs)
 			{
 				std::cout << "Could not open " << filename << std::endl;
 
-				return 0;
+				return 2;
 			}
 
 			//// write copy header
@@ -5345,7 +5345,8 @@ static uint8_t find_dev(libusb_device **devs)
 				printf("libusb_open() failed for device [0x%04X:0x%04X] with error [%d] %s\n", desc.idVendor, desc.idProduct, ret, libusb_error_name(ret));
 
 				//libusb_exit(NULL);
-				continue;
+				//continue;
+				return 3;
 			}
 
 			scan_for_bt_endpoints(libusb_device);
@@ -5394,7 +5395,7 @@ static uint8_t find_dev(libusb_device **devs)
 					printf("Couldn't detach kernel driver!\n");
 					libusb_free_device_list(devs, 1);
 					libusb_close(handle);
-					return -1;
+					return 4;
 				}
 			}
 
@@ -5408,7 +5409,7 @@ static uint8_t find_dev(libusb_device **devs)
 				printf("libusb_close() - closing handle done\n");
 				libusb_exit(NULL);
 
-				return 0;
+				return 5;
 			}
 			Sleep(wait);
 
@@ -5440,7 +5441,7 @@ static uint8_t find_dev(libusb_device **devs)
 					printf("libusb_close() - closing handle done\n");
 					libusb_exit(NULL);
 
-					return 0;
+					return 6;
 				}
 			}
 			for (c = 0; c < ACL_IN_BUFFER_COUNT; c++)
@@ -5456,7 +5457,7 @@ static uint8_t find_dev(libusb_device **devs)
 					printf("libusb_close() - closing handle done\n");
 					libusb_exit(NULL);
 
-					return 0;
+					return 7;
 				}
 			}
 
@@ -5499,7 +5500,7 @@ static uint8_t find_dev(libusb_device **devs)
 					printf("libusb_close() - closing handle done\n");
 					libusb_exit(NULL);
 
-					return 0;
+					return 8;
 				}
 				printf("libusb_submit_transfer() done.\n");
 
@@ -5595,7 +5596,7 @@ static uint8_t find_dev(libusb_device **devs)
 					context = NULL;
 					printf("libusb_exit() done.\n");
 
-					return 0;
+					return 9;
 				}
 
 				print_transfer_status(acl_in_transfer[c]);
@@ -5838,6 +5839,8 @@ static uint8_t find_dev(libusb_device **devs)
 	}
 
 	printf("end find_dev()\n");
+
+	return 0;
 }
 
 // http://web.mit.edu/freebsd/head/sys/netgraph/bluetooth/socket/ng_btsocket_rfcomm.c
@@ -5992,7 +5995,7 @@ static uint8_t ng_btsocket_rfcomm_fcs2(uint8_t *data)
 
 
 
-int main_deactivated()
+int main()
 {
 	std::cout << "Hello HCI test!" << std::endl;
 
@@ -6043,15 +6046,16 @@ int main_deactivated()
 		//	currentUSBDevice = usbDevice;
 		//}
 
-		// 04b4:1004
-		if ((0x04b4 == usbDevice->get_vendor_id()) && (0x1004 == usbDevice->get_device_id()))
-		{
-			fx2lpBulkloopUSBDevice = usbDevice;
-			currentUSBDevice = usbDevice;
-			
-		}
+		//// 04b4:1004
+		//if ((0x04b4 == usbDevice->get_vendor_id()) && (0x1004 == usbDevice->get_device_id()))
+		//{
+		//	fx2lpBulkloopUSBDevice = usbDevice;
+		//	currentUSBDevice = usbDevice;
+		//	
+		//}
 	}	
 
+	/*
 	if (nullptr != currentUSBDevice && (!currentUSBDevice->is_open()) && (currentUSBDevice->can_be_opened))
 	{
 		libusb_error open_result = currentUSBDevice->open();
@@ -6098,6 +6102,7 @@ int main_deactivated()
 	//
 
 	return 0;
+	*/
 
 	link_key_database.load_from_file("link_key_database.lkd");
 
@@ -6309,22 +6314,22 @@ int main_deactivated()
 	*/
 
 	/**/
-		/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
-		std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
-		if (!temp_file.is_open())
-		{
-			std::cout << "Could not open " << filename << std::endl;
-			return 0;
-		}
-		file = &temp_file;*/
-
-		//	std::cout << "libusb_init() ..." << std::endl;
-	int r = libusb_init(&context);
-	if (r < 0)
+	/*std::string filename = "C:/aaa_se/hci_bluetooth/doc/hci_server.pklg";
+	std::fstream temp_file(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+	if (!temp_file.is_open())
 	{
-		return r;
+		std::cout << "Could not open " << filename << std::endl;
+		return 0;
 	}
-	//	std::cout << "libusb_init() done." << std::endl;
+	file = &temp_file;*/
+
+	////	std::cout << "libusb_init() ..." << std::endl;
+	//int r = libusb_init(&context);
+	//if (r < 0)
+	//{
+	//	return r;
+	//}
+	////	std::cout << "libusb_init() done." << std::endl;
 
 #if 1
 	libusb_set_option(context, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
@@ -6343,7 +6348,10 @@ int main_deactivated()
 	}
 	//	std::cout << "libusb_get_device_list() done." << std::endl;
 
-	find_dev(devs);
+	uint8_t find_devs_result = find_dev(devs);
+	if (find_devs_result != 0) {
+		std::cout << "error encountered with find_devs() ..." << std::endl;
+	}
 
 	if (*devs != NULL)
 	{

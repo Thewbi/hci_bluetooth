@@ -72,7 +72,7 @@ static int print_usage(int error_code) {
 
 #define FIRMWARE 0
 #define LOADER 1
-int main(int argc, char* argv[])
+int main_deactivated(int argc, char* argv[])
 {
 	printf("Worst app ever!\n");
 

@@ -3,6 +3,7 @@
 #ifndef _HCI_H_
 #define _HCI_H_
 
+#include <string>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>

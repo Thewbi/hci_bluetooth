@@ -8,6 +8,17 @@ The Bluekitchen stack was used to learn how bluetooth stacks actually work!
 If you are using USB or libUSB on windows, then have a look at doc/libusb_on_windows.txt.
 Especially pay attention to the section about Zadig! Zadig will solve a lot of issues.
 
+Plug in the ASUS BT400 UBS Bluetooth dongle.
+
+In Zadig:
+* Options > List all Devices
+* From the drop down list, select BCM920702 Bluetooth 4.0
+* In the Driver-section, select WinUSB (v6.1.7600.16385) (Not libusb-win32 (v1.4.0.0))
+* Not down the VID: 0B05 and PID: 17CB in case you need it later.
+* Click "Replace Driver"
+* Click "Close"
+* Close Zadig
+
 # What does this repository contain?
 
 Warning: This is work in progress! This section talks about planned and already implemented features alike!
